@@ -49,5 +49,5 @@ Recrutadores, desenvolvedores e visitantes têm total permissão para visualizar
 
 ---
 <p align="center">
-  Desenvolvido com 💚 por [Seu Nome] como parte do meu ecossistema de portfólio.
+  Desenvolvido com 💚 por Kayque Reis como parte do meu ecossistema de portfólio.
 </p>
