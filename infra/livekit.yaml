@@ -5,9 +5,9 @@ rtc:
   port_range_end: 50050
   use_external_ip: false
 
-# 💰 FinOps: Cap Inteligente de Banda (8 Mbps = 1.000.000 bytes/s)
+# 💰 FinOps: Teto de Banda do Nó (50 MB/s = 400 Mbps para comportar múltiplos streams 120 FPS)
 limit:
-  bytes_per_sec: 1000000 # 8 Mbps teto de tráfego por participante
+  bytes_per_sec: 50000000
 
 room:
   empty_timeout: 300

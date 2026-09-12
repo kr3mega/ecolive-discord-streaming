@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { RemoteTrackPublication, VideoQuality } from 'livekit-client';
+import { RemoteTrackPublication, VideoQuality, LocalVideoTrack } from 'livekit-client';
 
 interface VideoPlayerProps {
-  publication: RemoteTrackPublication;
+  publication?: RemoteTrackPublication;
+  localTrack?: LocalVideoTrack | null;
   participantIdentity: string;
   participantName?: string;
   isObs?: boolean;
+  isLocal?: boolean;
   onSetQuality?: (quality: VideoQuality) => void;
 }
 
@@ -19,9 +21,11 @@ interface StreamStats {
 
 export function VideoPlayer({
   publication,
+  localTrack,
   participantIdentity,
   participantName,
   isObs = false,
+  isLocal = false,
   onSetQuality,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -32,22 +36,39 @@ export function VideoPlayer({
   const [selectedQuality, setSelectedQuality] = useState<VideoQuality>(VideoQuality.HIGH);
   const [isPipActive, setIsPipActive] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
-  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo e define a qualidade solicitada
+  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo
   useEffect(() => {
     const videoEl = videoRef.current;
-    if (!videoEl || !publication.track) return;
+    if (!videoEl) return;
 
-    publication.track.attach(videoEl);
-    publication.setVideoQuality(selectedQuality);
+    if (localTrack) {
+      localTrack.attach(videoEl);
+      return () => {
+        localTrack.detach(videoEl);
+      };
+    }
 
-    return () => {
-      if (publication.track && videoEl) {
-        publication.track.detach(videoEl);
-      }
-    };
-  }, [publication, selectedQuality]);
+    if (publication?.track) {
+      publication.track.attach(videoEl);
+      publication.setVideoQuality(selectedQuality);
+
+      return () => {
+        if (publication.track && videoEl) {
+          publication.track.detach(videoEl);
+        }
+      };
+    }
+  }, [publication, localTrack, selectedQuality]);
 
   // 2. Telemetria WebRTC (Resolução, FPS e Bitrate real decodificado)
   useEffect(() => {
@@ -58,11 +79,20 @@ export function VideoPlayer({
       const videoEl = videoRef.current;
       if (!videoEl) return;
 
-      const track = publication.videoTrack;
-      if (!track) return;
-
       const currentWidth = videoEl.videoWidth || 0;
       const currentHeight = videoEl.videoHeight || 0;
+
+      if (localTrack) {
+        setStats({
+          resolution: `${currentWidth}x${currentHeight}`,
+          fps: 60,
+          bitrate: 6000,
+        });
+        return;
+      }
+
+      const track = publication?.videoTrack;
+      if (!track) return;
 
       // Obtém estatísticas de recepção de RTP
       const report: RTCStatsReport | undefined = await track.getRTCStatsReport?.();
@@ -98,7 +128,7 @@ export function VideoPlayer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [publication]);
+  }, [publication, localTrack]);
 
   // 3. Document Picture-in-Picture com fallback para Standard PiP
   const togglePictureInPicture = useCallback(async () => {
@@ -207,54 +237,80 @@ export function VideoPlayer({
   };
 
   return (
-    <div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl transition-all hover:border-zinc-700">
+    <div className="group/player flex flex-col bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300">
       {/* Barra de Controle Superior */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-zinc-800">
-        <div className="flex items-center gap-2 truncate">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
           <span
-            className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider flex items-center gap-1.5 ${
-              isObs
-                ? 'bg-purple-900/70 text-purple-300 border border-purple-600/50 shadow-sm shadow-purple-900/30'
-                : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
+            className={`px-2.5 py-1 text-[10px] font-semibold rounded-full uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${
+              isLocal
+                ? 'bg-blue-950/60 text-blue-300 border border-blue-500/30'
+                : isObs
+                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/30 shadow-sm shadow-purple-950/40'
+                : 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30'
             }`}
           >
-            {isObs ? '🟣 OBS Streamer (WHIP)' : '🌐 PlayWeb Casual'}
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                isLocal ? 'bg-blue-400' : isObs ? 'bg-purple-400' : 'bg-emerald-400'
+              } animate-pulse`}
+            />
+            {isLocal ? 'Sua Transmissão' : isObs ? 'OBS Studio (WHIP)' : 'PlayWeb Casual'}
           </span>
-          <span className="text-xs font-semibold text-zinc-200 truncate">
+          <span
+            className="text-xs font-medium text-zinc-200 truncate"
+            title={participantName || participantIdentity}
+          >
             {participantName || participantIdentity}
           </span>
         </div>
 
-        {/* Seletor de Resolução / Camadas do Simulcast */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => handleQualityChange(VideoQuality.LOW)}
-            className={`px-2 py-0.5 text-[11px] font-semibold rounded transition ${
-              selectedQuality === VideoQuality.LOW ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
-            title="360p (Economia máxima)"
-          >
-            360p
-          </button>
-          <button
-            onClick={() => handleQualityChange(VideoQuality.MEDIUM)}
-            className={`px-2 py-0.5 text-[11px] font-semibold rounded transition ${
-              selectedQuality === VideoQuality.MEDIUM ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
-            title="720p (Modo equilibrado)"
-          >
-            720p
-          </button>
-          <button
-            onClick={() => handleQualityChange(VideoQuality.HIGH)}
-            className={`px-2 py-0.5 text-[11px] font-semibold rounded transition ${
-              selectedQuality === VideoQuality.HIGH ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
-            title="1080p60 (Qualidade total)"
-          >
-            1080p60
-          </button>
-        </div>
+        {/* Seletor de Resolução / Camadas do Simulcast (Segmented Control) */}
+        {!isLocal ? (
+          <div className="flex items-center bg-zinc-900/90 p-0.5 rounded-lg border border-zinc-800/80 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleQualityChange(VideoQuality.LOW)}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
+                selectedQuality === VideoQuality.LOW
+                  ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="360p • Economia máxima de dados"
+            >
+              360p
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQualityChange(VideoQuality.MEDIUM)}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
+                selectedQuality === VideoQuality.MEDIUM
+                  ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="720p • Modo equilibrado"
+            >
+              720p
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQualityChange(VideoQuality.HIGH)}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
+                selectedQuality === VideoQuality.HIGH
+                  ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="1080p60 • Qualidade total"
+            >
+              1080p60
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Transmitindo 1080p60</span>
+          </div>
+        )}
       </div>
 
       {/* Wrapper de Ancoragem para transferência segura no PiP */}
@@ -269,52 +325,88 @@ export function VideoPlayer({
             className="w-full h-full object-contain"
           />
 
-          {/* HUD de Telemetria (Bitrate / FPS / Resolução) */}
-          <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2.5 text-xs font-mono select-none z-20 pointer-events-none shadow-xl">
-            <span className="text-zinc-100 font-bold">{stats.resolution}</span>
-            <span className="text-zinc-600">•</span>
+          {/* HUD de Telemetria Flutuante (Bitrate / FPS / Resolução) */}
+          <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 text-[11px] font-mono select-none z-20 pointer-events-none shadow-2xl">
+            <span className="text-zinc-200 font-semibold">{stats.resolution}</span>
+            <span className="text-zinc-600">·</span>
             
             {/* Indicador de Taxa de Quadros (Suporte a 120 FPS Ultra) */}
             <span
               className={
                 stats.fps >= 100
-                  ? 'text-cyan-300 font-extrabold flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]'
+                  ? 'text-cyan-300 font-bold flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]'
                   : stats.fps >= 55
-                  ? 'text-emerald-400 font-bold'
-                  : 'text-amber-400 font-bold'
+                  ? 'text-emerald-400 font-medium'
+                  : 'text-amber-400 font-medium'
               }
             >
               {stats.fps >= 100 ? `⚡ ${stats.fps} FPS ULTRA` : `${stats.fps} FPS`}
             </span>
 
-            <span className="text-zinc-600">•</span>
-            <span className="text-zinc-200">{stats.bitrate} kbps</span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-300">
+              {stats.bitrate > 1000 ? `${(stats.bitrate / 1000).toFixed(1)} Mbps` : `${stats.bitrate} kbps`}
+            </span>
           </div>
 
-          {/* Controles de Janela (Áudio / PiP / Fullscreen) */}
-          <div className="absolute bottom-3 right-3 flex items-center gap-2 z-20 opacity-90 group-hover:opacity-100 transition-opacity">
+          {/* Dock Flutuante de Controles (Áudio / PiP / Fullscreen com Ícones SVG) */}
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl z-20 opacity-80 group-hover:opacity-100 transition-all duration-200">
+            {/* Botão de Áudio (Mutar / Desmutar) */}
             <button
+              type="button"
               onClick={toggleMute}
-              className={`px-2.5 py-1.5 rounded border border-white/10 text-xs font-semibold backdrop-blur-md transition ${
-                isMuted ? 'bg-amber-900/80 text-amber-200 hover:bg-amber-800' : 'bg-black/80 text-zinc-200 hover:bg-zinc-800'
+              className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                isMuted
+                  ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                  : 'text-zinc-300 hover:text-white hover:bg-zinc-800/80'
               }`}
               title={isMuted ? 'Desmutar Áudio' : 'Mutar Áudio'}
             >
-              {isMuted ? '🔇 Desmutar' : '🔊 Mutar'}
+              {isMuted ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              )}
             </button>
+
+            {/* Botão Picture-in-Picture */}
             <button
+              type="button"
               onClick={togglePictureInPicture}
-              className="bg-black/80 hover:bg-zinc-800 text-zinc-200 px-2.5 py-1.5 rounded border border-white/10 text-xs font-semibold backdrop-blur-md transition"
-              title="Picture-in-Picture com HUD"
+              className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                isPipActive
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-zinc-300 hover:text-white hover:bg-zinc-800/80'
+              }`}
+              title={isPipActive ? 'Fechar Janela Flutuante (PiP)' : 'Janela Flutuante (PiP)'}
             >
-              PiP
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 11h5a1 1 0 011 1v4a1 1 0 01-1 1h-5a1 1 0 01-1-1v-4a1 1 0 011-1z" />
+              </svg>
             </button>
+
+            {/* Botão Tela Cheia (Alterna entre Expand / Compress) */}
             <button
+              type="button"
               onClick={toggleFullscreen}
-              className="bg-black/80 hover:bg-zinc-800 text-zinc-200 px-2.5 py-1.5 rounded border border-white/10 text-xs font-semibold backdrop-blur-md transition"
-              title="Tela Cheia"
+              className="p-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              title={isFullscreen ? 'Sair da Tela Cheia' : 'Tela Cheia'}
             >
-              [ ]
+              {isFullscreen ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 14h6m0 0v6m0-6l-7 7m17-7h-6m0 0v6m0-6l7 7M4 10h6m0 0V4m0 6l-7-7m17 7h-6m0 0V4m0 6l7-7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

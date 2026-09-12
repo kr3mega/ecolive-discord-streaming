@@ -2,16 +2,15 @@ import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
 function resolveServerUrl(req: NextRequest): string {
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
-  const proto = req.headers.get('x-forwarded-proto') || '';
-
-  // Se a requisição vier via túnel HTTPS (Ngrok / Discord Activity)
-  if (proto === 'https' || host.includes('ngrok') || (!host.includes('localhost') && !host.includes('127.0.0.1') && host !== '')) {
-    return `wss://${host}`;
+  // Se configurado no .env.local, prioriza a URL direta
+  if (process.env.LIVEKIT_URL) {
+    return process.env.LIVEKIT_URL;
   }
 
-  // Fallback para desenvolvimento local
-  return process.env.LIVEKIT_URL || 'ws://127.0.0.1:7880';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '127.0.0.1';
+  const hostname = host.split(':')[0];
+
+  return `ws://${hostname}:7880`;
 }
 
 export async function GET(req: NextRequest) {
