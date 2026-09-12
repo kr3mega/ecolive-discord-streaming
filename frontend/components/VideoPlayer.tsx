@@ -25,6 +25,8 @@ interface StreamStats {
   resolution: string;
   fps: number;
   bitrate: number;
+  rtt?: number;
+  packetLoss?: number;
 }
 
 export function VideoPlayer({
@@ -44,10 +46,40 @@ export function VideoPlayer({
   const [stats, setStats] = useState<StreamStats>({ resolution: '0x0', fps: 0, bitrate: 0 });
   const [selectedQuality, setSelectedQuality] = useState<VideoQuality>(VideoQuality.HIGH);
   const [isPipActive, setIsPipActive] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [volume, setVolume] = useState<number>(1);
-  const lastVolumeRef = useRef<number>(1);
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const savedMuted = localStorage.getItem('ecolive_muted');
+      if (savedMuted !== null) {
+        return savedMuted === 'true';
+      }
+    }
+    return false;
+  });
+  const [volume, setVolume] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ecolive_volume');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+      }
+    }
+    return 1;
+  });
+  const lastVolumeRef = useRef<number>(volume > 0 ? volume : 1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sincroniza o elemento de vídeo com o estado de áudio e persiste no localStorage
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (videoEl) {
+      videoEl.muted = isMuted;
+      videoEl.volume = volume;
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ecolive_volume', volume.toString());
+      localStorage.setItem('ecolive_muted', isMuted ? 'true' : 'false');
+    }
+  }, [isMuted, volume]);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -86,10 +118,12 @@ export function VideoPlayer({
     const videoEl = videoRef.current;
     if (!videoEl || isLocal || !participant) return;
 
-    // Anexa trilhas existentes
+    // Anexa trilhas existentes e garante sincronismo imediato de áudio
     participant.audioTrackPublications.forEach((pub) => {
       if (pub.track && videoEl) {
         pub.track.attach(videoEl);
+        videoEl.muted = isMuted;
+        videoEl.volume = volume;
       }
     });
 
@@ -97,6 +131,8 @@ export function VideoPlayer({
     const handleTrackSubscribed = (track: Track) => {
       if (track.kind === Track.Kind.Audio && videoEl) {
         track.attach(videoEl);
+        videoEl.muted = isMuted;
+        videoEl.volume = volume;
       }
     };
 
@@ -110,9 +146,9 @@ export function VideoPlayer({
         }
       });
     };
-  }, [participant, isLocal]);
+  }, [participant, isLocal, isMuted, volume]);
 
-  // 2. Telemetria WebRTC (Resolução, FPS e Bitrate real decodificado)
+  // 2. Telemetria WebRTC (Resolução, FPS, Bitrate, RTT/Ping e Perda de Pacotes)
   useEffect(() => {
     let lastBytes = 0;
     let lastTimestamp = 0;
@@ -129,6 +165,8 @@ export function VideoPlayer({
           resolution: `${currentWidth}x${currentHeight}`,
           fps: 60,
           bitrate: 6000,
+          rtt: 0,
+          packetLoss: 0,
         });
         return;
       }
@@ -141,6 +179,8 @@ export function VideoPlayer({
       
       let fps = 0;
       let bitrate = 0;
+      let rtt: number | undefined = undefined;
+      let packetLoss: number | undefined = undefined;
 
       if (report) {
         report.forEach((stat) => {
@@ -158,6 +198,19 @@ export function VideoPlayer({
 
             lastBytes = bytes;
             lastTimestamp = now;
+
+            const lost = stat.packetsLost || 0;
+            const received = stat.packetsReceived || 0;
+            const total = lost + received;
+            if (total > 0 && lost >= 0) {
+              packetLoss = Math.round((lost / total) * 100 * 10) / 10;
+            }
+          }
+
+          if (stat.type === 'candidate-pair' && (stat.nominated || stat.state === 'succeeded')) {
+            if (typeof stat.currentRoundTripTime === 'number') {
+              rtt = Math.round(stat.currentRoundTripTime * 1000);
+            }
           }
         });
       }
@@ -166,6 +219,8 @@ export function VideoPlayer({
         resolution: `${currentWidth}x${currentHeight}`,
         fps: Math.round(fps),
         bitrate,
+        rtt,
+        packetLoss,
       });
     }, 1000);
 
@@ -333,7 +388,7 @@ export function VideoPlayer({
 
         {/* Seletor de Resolução / Camadas do Simulcast (Segmented Control) */}
         {!isLocal ? (
-          <div className="flex items-center bg-zinc-900/90 p-0.5 rounded-lg border border-zinc-800/80 shrink-0">
+          <div className="flex items-center bg-zinc-900/90 p-0.5 rounded-lg border border-zinc-800/80 shrink-0 scale-90 sm:scale-100 origin-right">
             <button
               type="button"
               onClick={() => handleQualityChange(VideoQuality.LOW)}
@@ -388,11 +443,16 @@ export function VideoPlayer({
             autoPlay
             playsInline
             muted={isMuted}
+            onVolumeChange={(e) => {
+              const el = e.currentTarget;
+              if (el.muted !== isMuted) setIsMuted(el.muted);
+              if (el.volume !== volume) setVolume(el.volume);
+            }}
             className="w-full h-full object-contain"
           />
 
-          {/* HUD de Telemetria Flutuante (Bitrate / FPS / Resolução) */}
-          <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 text-[11px] font-mono select-none z-20 pointer-events-none shadow-2xl">
+          {/* HUD de Telemetria Flutuante (Bitrate / FPS / Resolução / Ping RTT / Packet Loss) */}
+          <div className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 bg-black/80 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/10 flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono select-none z-20 pointer-events-none shadow-2xl flex-wrap max-w-[90%]">
             <span className="text-zinc-200 font-semibold">{stats.resolution}</span>
             <span className="text-zinc-600">·</span>
             
@@ -413,6 +473,27 @@ export function VideoPlayer({
             <span className="text-zinc-300">
               {stats.bitrate > 1000 ? `${(stats.bitrate / 1000).toFixed(1)} Mbps` : `${stats.bitrate} kbps`}
             </span>
+
+            {/* Latência RTT / Ping em Tempo Real */}
+            {typeof stats.rtt === 'number' && (
+              <>
+                <span className="text-zinc-600">·</span>
+                <span className="flex items-center gap-1 text-emerald-400 font-medium" title="Latência de ida e volta (RTT / Ping)">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {stats.rtt} ms
+                </span>
+              </>
+            )}
+
+            {/* Perda de Pacotes (Packet Loss %) */}
+            {typeof stats.packetLoss === 'number' && stats.packetLoss > 0 && (
+              <>
+                <span className="text-zinc-600">·</span>
+                <span className="text-rose-400 font-medium" title="Perda de Pacotes">
+                  {stats.packetLoss}% loss
+                </span>
+              </>
+            )}
           </div>
 
           {/* Dock Flutuante de Controles (Áudio / PiP / Fullscreen com Ícones SVG) */}

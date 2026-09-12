@@ -19,13 +19,17 @@ export default function Home() {
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
-  // Auto-detecta o ID do canal de voz do Discord caso aberto como Discord Activity
+  // Auto-detecta o ID do canal de voz do Discord e restaura preferências salvas
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const discordChannel = params.get('channel_id');
       if (discordChannel) {
         setChannelId(discordChannel);
+      }
+      const savedName = localStorage.getItem('ecolive_display_name');
+      if (savedName) {
+        setDisplayName(savedName);
       }
     }
   }, []);
@@ -61,6 +65,10 @@ export default function Home() {
     if (!name) {
       setJoinError('Por favor, informe seu Nome de Exibição.');
       return;
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ecolive_display_name', name);
     }
 
     // Gera um ID limpo derivado do nome do usuário + sufixo único
@@ -165,25 +173,25 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#0d0e12] text-zinc-100 flex flex-col items-center selection:bg-indigo-600/40">
       {/* Barra de Navegação Superior */}
-      <header className="w-full border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-sm text-white shadow-lg shadow-emerald-500/20">
+      <header className="w-full border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-xs sm:text-sm text-white shadow-lg shadow-emerald-500/20 shrink-0">
             🍃
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-tight text-zinc-100">EcoLive</h1>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                v0.6.0
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
+              <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                v0.7.0
               </span>
             </div>
-            <p className="text-[11px] text-zinc-400">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
+            <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
           </div>
         </div>
 
         {isConnected && (
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 text-xs bg-zinc-900/90 border border-zinc-800/90 px-3.5 py-1.5 rounded-xl shadow-inner">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <div className="hidden lg:flex items-center gap-2 text-xs bg-zinc-900/90 border border-zinc-800/90 px-3.5 py-1.5 rounded-xl shadow-inner">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-zinc-400">Sala:</span>
               <strong className="text-zinc-200 font-mono text-[11px]">{currentRoom}</strong>
@@ -197,34 +205,37 @@ export default function Home() {
               <button
                 type="button"
                 onClick={toggleScreenShare}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
               >
-                <span className="h-2 w-2 rounded-full bg-white animate-ping" />
-                <span>Parar Transmissão</span>
+                <span className="h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
+                <span className="hidden sm:inline">Parar Transmissão</span>
+                <span className="sm:hidden">Parar</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleOpenStreamModal}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-indigo-900/30 transition-all cursor-pointer"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-indigo-900/30 transition-all cursor-pointer"
               >
-                <span>🚀 Iniciar Transmissão</span>
+                <span>🚀</span>
+                <span className="hidden sm:inline">Iniciar Transmissão</span>
+                <span className="sm:hidden">Transmitir</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={disconnect}
-              className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-xs font-medium text-zinc-300 hover:text-white rounded-xl border border-zinc-800 transition cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-[11px] sm:text-xs font-medium text-zinc-300 hover:text-white rounded-xl border border-zinc-800 transition cursor-pointer"
             >
-              Sair da Sala
+              Sair
             </button>
           </div>
         )}
       </header>
 
       {/* Conteúdo Central */}
-      <div className="w-full max-w-7xl px-6 py-8 flex-1 flex flex-col">
+      <div className="w-full max-w-7xl px-3 sm:px-6 py-4 sm:py-8 flex-1 flex flex-col">
         {!isConnected ? (
           /* TELA INICIAL SIMPLIFICADA: Pede apenas o Nome de Exibição */
           <div className="max-w-sm w-full mx-auto my-auto flex flex-col gap-4">
@@ -253,7 +264,12 @@ export default function Home() {
                   <input
                     type="text"
                     value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    onChange={(e) => {
+                      setDisplayName(e.target.value);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('ecolive_display_name', e.target.value);
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
