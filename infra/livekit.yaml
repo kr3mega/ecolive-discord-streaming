@@ -4,5 +4,18 @@ rtc:
   port_range_start: 50000
   port_range_end: 50050
   use_external_ip: false
+
+# 💰 FinOps: Cap Inteligente de Banda (8 Mbps = 1.000.000 bytes/s)
+limit:
+  bytes_per_sec: 1000000 # 8 Mbps teto de tráfego por participante
+
+room:
+  empty_timeout: 300
+  departure_timeout: 20
+
 keys:
   devkey: "secret-super-seguro-para-desenvolvimento-local-32"
+
+logging:
+  level: info
+
