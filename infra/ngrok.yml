@@ -1,0 +1,10 @@
+version: "3"
+
+# Definição dos túneis seguros do EcoLive
+tunnels:
+  # Frontend Next.js (Iframe do Discord)
+  app:
+    proto: http
+    addr: host.docker.internal:3000
+    inspect: false
+

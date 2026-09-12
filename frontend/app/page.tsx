@@ -23,9 +23,15 @@ export default function Home() {
     setQuality,
   } = useLiveKit();
 
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!channelId.trim() || !userId.trim()) return;
+  const handleJoin = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!channelId.trim() || !userId.trim()) {
+      setJoinError('Por favor, informe o Canal de Voz e o ID do Usuário.');
+      return;
+    }
 
     setIsJoining(true);
     setJoinError(null);
@@ -122,7 +128,14 @@ export default function Home() {
                 </div>
               )}
 
-              <form onSubmit={handleJoin} className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleJoin(e);
+                }}
+                className="space-y-4"
+              >
                 <div>
                   <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                     ID do Canal de Voz (Discord channel_id)
@@ -169,9 +182,14 @@ export default function Home() {
                 </div>
 
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleJoin(e);
+                  }}
                   disabled={isJoining}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 font-semibold py-2.5 rounded-lg text-sm transition shadow-lg shadow-indigo-600/20 mt-2"
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 font-semibold py-2.5 rounded-lg text-sm transition shadow-lg shadow-indigo-600/20 mt-2 cursor-pointer"
                 >
                   {isJoining ? 'Conectando ao SFU...' : 'Conectar à Sala'}
                 </button>

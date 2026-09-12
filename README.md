@@ -38,48 +38,47 @@ A arquitetura foi desenhada com base em *"camadas progressivas de fricção e se
 
 ---
 
-## 💰 4. Infraestrutura e Regras de Controle de Banda (FinOps)
+## 💰 4. Infraestrutura, FinOps & Segurança Zero-Leakage
 
-O servidor atua puramente como um **roteador de pacotes (SFU)**, sem decodificação ou reencodificação de vídeo na CPU:
-- **Hardware e Nuvem:** Instância Ubuntu na Hetzner Cloud (Plano CX23 - Falkenstein/Helsinque, 2 vCPUs, 4 GB RAM, porta de rede compartilhada de 10 Gbps com 20 TB de tráfego mensal gratuito incluso).
-- **Cap Inteligente (Proteção):**
-  - Teto de Bitrate de 8 Mbps configurado via `livekit.yaml` (`limit.bytes_per_sec: 1000000`).
-  - Instâncias de Ingress operam em Modo Passthrough (apenas repasse de codecs originais).
-  - Dynamic Simulcast ativo no receptor (Iframe) para pausar e otimizar banda em grids com vídeos minimizados.
+O projeto opera sob uma estratégia de **validação de custo zero e máxima segurança**:
+- **Ambiente Local via Docker:** Servidor LiveKit SFU de alta performance rodando localmente sem custos de infraestrutura de nuvem nesta fase de validação.
+- **Túnel Seguro via Ngrok:** Exposição do frontend HTTPS e da sinalização WSS com criptografia TLS ponta a ponta para homologação imediata no ecossistema de Activities do Discord.
+- **Cap Inteligente (FinOps):** Teto de Bitrate de 8 Mbps configurado via `livekit.yaml` (`limit.bytes_per_sec: 1000000`).
+- **🛡️ Isolamento Estrito de Credenciais (Server-Side Only):**
+  - **Zero-Leakage no Frontend:** Nenhuma chave de API, secret ou authtoken possui o prefixo `NEXT_PUBLIC_`. Elas residem exclusivamente no runtime do servidor Node.js/Next.js.
+  - **Tokens com TTL de Curta Duração:** O frontend recebe apenas JWTs temporários assinados com prazo de expiração estrito.
+  - **Anti-Cache:** Respostas de autenticação possuem cabeçalhos `Cache-Control: no-store` para impedir armazenamento em proxies intermediários.
 
 ---
 
-## 🗺️ 5. Roadmap de Execução
+## 🗺️ 5. Roadmap de Execução Consolidado
 
 - [x] **Fase 1: O Coração da Mídia (Ambiente Local)**
-  - [x] Configuração do Docker e inicialização do container LiveKit Server com limites FinOps e portas UDP.
-  - [x] Backend de autenticação de tokens JWT respeitando `channel_id` e identidades `user_` / `obs_`.
-  - [x] Frontend React / Next.js consumindo `getDisplayMedia` (PlayWeb Casual) com Simulcast por hardware (360p, 720p60, 1080p60).
-  - [x] Componente `VideoPlayer` com HUD de telemetria em tempo real (FPS, Resolução, Bitrate), Document Picture-in-Picture e seletor de camadas.
-  - [x] Grid Multi Stream dinâmica com layout mosaico.
-- [ ] **Fase 2: O Interruptor Inteligente (Orquestração FinOps)**
-  - [ ] Bot no Discord e backend em Node.js ou Python como API intermediária.
-  - [ ] Gatilho de Boot: Abertura do Iframe dispara ativação da VPS na Hetzner (`power_on`).
-  - [ ] Cron de Desligamento: Webhooks do LiveKit notificando esvaziamento das salas e `power_off` após 15 minutos de inatividade.
-- [ ] **Fase 3: A Infraestrutura de Produção (Hetzner Cloud)**
-  - [ ] Provisionamento da VPS CX23 na Europa.
-  - [ ] Firewall para o range UDP de mídia (50000-60000).
-  - [ ] Proxy Reverso (Caddy / Nginx) HTTPS 443 -> WSS e WHIP (porta 8085).
+  - [x] Container LiveKit Server (`ecolive-livekit`) configurado com limites FinOps e portas UDP.
+  - [x] Frontend Next.js com PlayWeb Casual (`getDisplayMedia`) e Simulcast em 3 camadas por hardware a 60 FPS.
+  - [x] Grid Multi Stream dinâmico em mosaico e HUD de telemetria em tempo real no `VideoPlayer`.
+- [x] **Fase 2: O Túnel Seguro & Blindagem de Credenciais (Ngrok + Zero-Leakage)**
+  - [x] Configuração declarativa de túneis seguros via `infra/ngrok.yml` e Docker Compose.
+  - [x] Remoção de todas as variáveis `NEXT_PUBLIC_` para isolamento total de chaves e segredos no servidor.
+  - [x] Proteção global de credenciais via `.gitignore` raiz e criação de templates `.env.example`.
+  - [x] Rota `/api/token` blindada com TTL curto e cabeçalhos anti-cache.
+- [ ] **Fase 3: Bot do Discord & Sensor de Presença Local**
+  - [ ] Bot local no Discord (`discord.js`) atuando como monitor de presença no canal de voz.
+  - [ ] Comandos Slash para iniciar e consultar o status da sessão do EcoLive.
 - [ ] **Fase 4: O Encaixe Perfeito (Discord Embedded App)**
-  - [ ] Integração do `@discord/embedded-app-sdk` no frontend para leitura de contexto (usuários, avatar).
-  - [ ] UI dividida em "PlayWeb Casual" e "OBS Studio" (com geração de credenciais WHIP e onboarding visual).
+  - [ ] Integração do `@discord/embedded-app-sdk` no frontend para contexto do usuário (avatar, username).
+  - [ ] Validação das modalidades PlayWeb e OBS diretamente dentro do Iframe oficial do Discord.
 
 ---
 
-## 🚀 Como Executar Localmente (Fase 1)
+## 🚀 Como Executar Localmente
 
 ### 1. Iniciar o SFU Local (LiveKit Server)
-Certifique-se de que o Docker Desktop está em execução e execute:
 ```bash
 cd infra
 docker compose up -d
 ```
-Verifique a saúde do servidor em `http://127.0.0.1:7880` (deve retornar `OK`).
+Verifique se o servidor está ativo em `http://127.0.0.1:7880` (deve retornar `OK`).
 
 ### 2. Iniciar o Frontend (Next.js)
 Em outro terminal:
@@ -89,10 +88,20 @@ npm run dev
 ```
 Acesse `http://localhost:3000` no seu navegador.
 
+### 3. (Opcional) Iniciar o Túnel Seguro do Ngrok
+Para expor a aplicação em HTTPS público para testes no Discord:
+1. Configure seu authtoken no arquivo `infra/.env` (veja `infra/.env.example`).
+2. Execute o script:
+```powershell
+cd infra
+.\start-tunnel.ps1
+```
+
 ---
 
 ## ⚖️ Licença e Direitos Autorais
 
 Este é um projeto proprietário e de portfólio pessoal de **Kayque Reis**. Todos os direitos reservados.
 Proibida a reprodução ou uso comercial não autorizado.
+
 

@@ -60,9 +60,10 @@ export function useLiveKit() {
       setCurrentIdentity(identity);
       setCurrentRoom(roomName);
 
-      // Instanciação da sala com Dynacast habilitado (Economia de banda FinOps)
+      // Instanciação da sala: adaptiveStream false permite que o seletor de qualidade
+      // (1080p60) funcione mesmo se o elemento de vídeo na tela for menor que 1920x1080.
       const room = new Room({
-        adaptiveStream: true,
+        adaptiveStream: false,
         dynacast: true,
       });
 

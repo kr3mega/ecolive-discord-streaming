@@ -1,6 +1,19 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
+function resolveServerUrl(req: NextRequest): string {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const proto = req.headers.get('x-forwarded-proto') || '';
+
+  // Se a requisição vier via túnel HTTPS (Ngrok / Discord Activity)
+  if (proto === 'https' || host.includes('ngrok') || (!host.includes('localhost') && !host.includes('127.0.0.1') && host !== '')) {
+    return `wss://${host}`;
+  }
+
+  // Fallback para desenvolvimento local
+  return process.env.LIVEKIT_URL || 'ws://127.0.0.1:7880';
+}
+
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   
@@ -19,8 +32,6 @@ export async function GET(req: NextRequest) {
   }
 
   // 🛡️ Regra da Especificação: Identidade Única
-  // PlayWeb Casual assume: user_[Discord_User_ID]
-  // Modos OBS assumem: obs_[Discord_User_ID]
   const cleanId = rawUserId.replace(/^(user_|obs_)/, '');
   const participantIdentity = mode === 'obs' ? `obs_${cleanId}` : `user_${cleanId}`;
 
@@ -38,6 +49,7 @@ export async function GET(req: NextRequest) {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
       name: displayName || undefined,
+      ttl: '4h', // TTL curto de 4 horas para máxima segurança
     });
 
     // Sala isolada por ID do Canal de Voz do Discord (channel_id)
@@ -49,13 +61,22 @@ export async function GET(req: NextRequest) {
     });
 
     const token = await at.toJwt();
+    const livekitUrl = resolveServerUrl(req);
 
-    return NextResponse.json({
-      token,
-      identity: participantIdentity,
-      room: channelId,
-      serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'ws://127.0.0.1:7880',
-    });
+    return NextResponse.json(
+      {
+        token,
+        identity: participantIdentity,
+        room: channelId,
+        serverUrl: livekitUrl,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+          'Pragma': 'no-cache',
+        },
+      }
+    );
   } catch (error) {
     console.error('Erro ao gerar AccessToken do LiveKit:', error);
     return NextResponse.json(
@@ -96,6 +117,7 @@ export async function POST(req: NextRequest) {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
       name: displayName || undefined,
+      ttl: '4h', // TTL curto de 4 horas para máxima segurança
     });
 
     at.addGrant({
@@ -106,13 +128,22 @@ export async function POST(req: NextRequest) {
     });
 
     const token = await at.toJwt();
+    const livekitUrl = resolveServerUrl(req);
 
-    return NextResponse.json({
-      token,
-      identity: participantIdentity,
-      room: channelId,
-      serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'ws://127.0.0.1:7880',
-    });
+    return NextResponse.json(
+      {
+        token,
+        identity: participantIdentity,
+        room: channelId,
+        serverUrl: livekitUrl,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+          'Pragma': 'no-cache',
+        },
+      }
+    );
   } catch {
     return NextResponse.json(
       { error: 'Payload JSON inválido.' },

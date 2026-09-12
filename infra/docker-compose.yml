@@ -9,4 +9,22 @@ services:
       - "7881:7881"
       - "50000-50050:50000-50050/udp"
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+      - ./livekit.yaml:/etc/livekit.yaml
+
+  ngrok:
+    container_name: ecolive-ngrok
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    command: start --all --config /etc/ngrok.yml
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - tunnel
+
+

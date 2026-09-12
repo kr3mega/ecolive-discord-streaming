@@ -34,19 +34,20 @@ export function VideoPlayer({
   const [isMuted, setIsMuted] = useState(true);
 
 
-  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo
+  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo e define a qualidade solicitada
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !publication.track) return;
 
     publication.track.attach(videoEl);
+    publication.setVideoQuality(selectedQuality);
 
     return () => {
       if (publication.track && videoEl) {
         publication.track.detach(videoEl);
       }
     };
-  }, [publication.track]);
+  }, [publication, selectedQuality]);
 
   // 2. Telemetria WebRTC (Resolução, FPS e Bitrate real decodificado)
   useEffect(() => {
