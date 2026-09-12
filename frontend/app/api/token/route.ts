@@ -2,15 +2,20 @@ import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
 function resolveServerUrl(req: NextRequest): string {
-  // Se configurado no .env.local, prioriza a URL direta
-  if (process.env.LIVEKIT_URL) {
-    return process.env.LIVEKIT_URL;
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '127.0.0.1';
+  const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+
+  // 1. Se a requisição veio do próprio PC local (desenvolvimento/testes)
+  if (isLocalhost) {
+    return process.env.LIVEKIT_URL || 'ws://127.0.0.1:7880';
   }
 
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '127.0.0.1';
-  const hostname = host.split(':')[0];
+  // 2. Se for acesso externo (celular via Cloudflare Tunnel ou Iframe do Discord)
+  if (process.env.LIVEKIT_PUBLIC_URL) {
+    return process.env.LIVEKIT_PUBLIC_URL;
+  }
 
-  return `ws://${hostname}:7880`;
+  return process.env.LIVEKIT_URL || 'ws://127.0.0.1:7880';
 }
 
 export async function GET(req: NextRequest) {

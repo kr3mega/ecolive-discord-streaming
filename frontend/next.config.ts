@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
     "*.ngrok-free.app",
     "*.ngrok.app",
     "drinking-lusty-outweigh.ngrok-free.dev",
+    "*.trycloudflare.com",
+    "taken-eligibility-uniprotkb-magical.trycloudflare.com",
   ],
   async rewrites() {
     return [

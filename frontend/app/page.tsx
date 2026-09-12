@@ -134,7 +134,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold tracking-tight text-zinc-100">EcoLive</h1>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                v0.4.0
+                v0.5.0
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
@@ -205,14 +205,7 @@ export default function Home() {
                 </div>
               )}
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleJoin(e);
-                }}
-                className="space-y-4"
-              >
+              <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
                     Seu Nome de Exibição
@@ -221,6 +214,12 @@ export default function Home() {
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleJoin();
+                      }
+                    }}
                     placeholder="ex: Kayque"
                     autoFocus
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
@@ -247,6 +246,12 @@ export default function Home() {
                         type="text"
                         value={channelId}
                         onChange={(e) => setChannelId(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleJoin();
+                          }
+                        }}
                         placeholder="call-discord-alpha"
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
                       />
@@ -258,15 +263,14 @@ export default function Home() {
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
-                    e.stopPropagation();
-                    handleJoin(e);
+                    handleJoin();
                   }}
                   disabled={isJoining}
                   className="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:bg-zinc-800 text-white font-semibold py-3 rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/25 mt-3 cursor-pointer"
                 >
                   {isJoining ? 'Entrando na Sala...' : 'Entrar na Sala'}
                 </button>
-              </form>
+              </div>
             </div>
           </div>
         ) : (

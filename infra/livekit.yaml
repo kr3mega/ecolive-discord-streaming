@@ -4,6 +4,7 @@ rtc:
   port_range_start: 50000
   port_range_end: 50050
   use_external_ip: false
+  allow_tcp_fallback: true
 
 # 💰 FinOps: Teto de Banda do Nó (50 MB/s = 400 Mbps para comportar múltiplos streams 120 FPS)
 limit:
