@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/livekit/:path*",
+        destination: "http://127.0.0.1:7880/:path*",
+      },
+      {
         source: "/rtc/:path*",
         destination: "http://127.0.0.1:7880/rtc/:path*",
       },

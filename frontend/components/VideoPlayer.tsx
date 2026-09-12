@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   RemoteTrackPublication,
-  VideoQuality,
   LocalVideoTrack,
   Participant,
   ParticipantEvent,
   Track,
+  VideoQuality,
 } from 'livekit-client';
 
 interface VideoPlayerProps {
@@ -18,7 +18,6 @@ interface VideoPlayerProps {
   participantName?: string;
   isObs?: boolean;
   isLocal?: boolean;
-  onSetQuality?: (quality: VideoQuality) => void;
 }
 
 interface StreamStats {
@@ -37,14 +36,12 @@ export function VideoPlayer({
   participantName,
   isObs = false,
   isLocal = false,
-  onSetQuality,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const [stats, setStats] = useState<StreamStats>({ resolution: '0x0', fps: 0, bitrate: 0 });
-  const [selectedQuality, setSelectedQuality] = useState<VideoQuality>(VideoQuality.HIGH);
   const [isPipActive, setIsPipActive] = useState(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -66,6 +63,10 @@ export function VideoPlayer({
     return 1;
   });
   const lastVolumeRef = useRef<number>(volume > 0 ? volume : 1);
+  const isMutedRef = useRef(isMuted);
+  const volumeRef = useRef(volume);
+  isMutedRef.current = isMuted;
+  volumeRef.current = volume;
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Sincroniza o elemento de vídeo com o estado de áudio e persiste no localStorage
@@ -81,13 +82,17 @@ export function VideoPlayer({
     }
   }, [isMuted, volume]);
 
+  // Bloqueia rolagem do body quando em tela cheia imersiva
   useEffect(() => {
-    const handleFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
     };
-    document.addEventListener('fullscreenchange', handleFsChange);
-    return () => document.removeEventListener('fullscreenchange', handleFsChange);
-  }, []);
+  }, [isFullscreen]);
 
   // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo
   useEffect(() => {
@@ -103,7 +108,7 @@ export function VideoPlayer({
 
     if (publication?.track) {
       publication.track.attach(videoEl);
-      publication.setVideoQuality(selectedQuality);
+      publication.setVideoQuality(VideoQuality.HIGH);
 
       return () => {
         if (publication.track && videoEl) {
@@ -111,9 +116,10 @@ export function VideoPlayer({
         }
       };
     }
-  }, [publication, localTrack, selectedQuality]);
+  }, [publication, localTrack]);
 
   // 1.1 Anexa trilhas de áudio do participante ao elemento de vídeo para reprodução sonora sincronizada
+  // OBS: Não depende de [isMuted, volume] para evitar detach/attach da trilha e piscamento preto ao arrastar o slider
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || isLocal || !participant) return;
@@ -122,8 +128,8 @@ export function VideoPlayer({
     participant.audioTrackPublications.forEach((pub) => {
       if (pub.track && videoEl) {
         pub.track.attach(videoEl);
-        videoEl.muted = isMuted;
-        videoEl.volume = volume;
+        videoEl.muted = isMutedRef.current;
+        videoEl.volume = volumeRef.current;
       }
     });
 
@@ -131,8 +137,8 @@ export function VideoPlayer({
     const handleTrackSubscribed = (track: Track) => {
       if (track.kind === Track.Kind.Audio && videoEl) {
         track.attach(videoEl);
-        videoEl.muted = isMuted;
-        videoEl.volume = volume;
+        videoEl.muted = isMutedRef.current;
+        videoEl.volume = volumeRef.current;
       }
     };
 
@@ -146,7 +152,7 @@ export function VideoPlayer({
         }
       });
     };
-  }, [participant, isLocal, isMuted, volume]);
+  }, [participant, isLocal]);
 
   // 2. Telemetria WebRTC (Resolução, FPS, Bitrate, RTT/Ping e Perda de Pacotes)
   useEffect(() => {
@@ -312,19 +318,111 @@ export function VideoPlayer({
     }
   }, [isPipActive]);
 
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(console.error);
-    } else {
-      document.exitFullscreen().catch(console.error);
-    }
-  };
+  const toggleFullscreen = useCallback(async () => {
+    const container = containerRef.current;
+    const video = videoRef.current;
+    if (!container) return;
 
-  const handleQualityChange = (quality: VideoQuality) => {
-    setSelectedQuality(quality);
-    if (onSetQuality) onSetQuality(quality);
-  };
+    interface DocumentVendorFs extends Document {
+      webkitFullscreenElement?: Element;
+      mozFullScreenElement?: Element;
+      msFullscreenElement?: Element;
+      webkitExitFullscreen?: () => Promise<void>;
+    }
+    const docVendor = document as DocumentVendorFs;
+
+    const isNativeFs = !!(
+      document.fullscreenElement ||
+      docVendor.webkitFullscreenElement ||
+      docVendor.mozFullScreenElement ||
+      docVendor.msFullscreenElement
+    );
+
+    if (isFullscreen || isNativeFs) {
+      // Sair do modo tela cheia
+      if (isNativeFs) {
+        try {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (docVendor.webkitExitFullscreen) {
+            await docVendor.webkitExitFullscreen();
+          }
+        } catch {
+          // Ignora caso o navegador já tenha saído
+        }
+      }
+      setIsFullscreen(false);
+    } else {
+      // 1. Ativa imediatamente o Fullscreen Imersivo no viewport do Discord
+      setIsFullscreen(true);
+
+      // 2. Tenta acionar o Fullscreen de SO nativo se o iframe do Discord permitir
+      try {
+        interface ElementVendorFs extends HTMLDivElement {
+          webkitRequestFullscreen?: () => Promise<void>;
+        }
+        interface VideoVendorFs extends HTMLVideoElement {
+          webkitEnterFullscreen?: () => void;
+        }
+        const containerVendor = container as ElementVendorFs;
+        const videoVendor = video as VideoVendorFs | null;
+
+        if (container.requestFullscreen) {
+          await container.requestFullscreen();
+        } else if (containerVendor.webkitRequestFullscreen) {
+          await containerVendor.webkitRequestFullscreen();
+        } else if (videoVendor?.webkitEnterFullscreen) {
+          videoVendor.webkitEnterFullscreen();
+        }
+      } catch (err) {
+        // Iframe do Discord bloqueia requestFullscreen nativo via Permissions Policy,
+        // mas nosso Fullscreen Imersivo CSS (fixed inset-0 z-50) já assumiu 100% da tela perfeitamente!
+        console.warn('Fullscreen nativo bloqueado pelo iframe do Discord, operando em modo imersivo:', err);
+      }
+    }
+  }, [isFullscreen]);
+
+  // Listener para sincronizar saída de fullscreen via ESC ou eventos nativos
+  useEffect(() => {
+    const handleFsChange = () => {
+      interface DocumentVendorFs extends Document {
+        webkitFullscreenElement?: Element;
+        mozFullScreenElement?: Element;
+        msFullscreenElement?: Element;
+      }
+      const docVendor = document as DocumentVendorFs;
+      const isNativeFs = !!(
+        document.fullscreenElement ||
+        docVendor.webkitFullscreenElement ||
+        docVendor.mozFullScreenElement ||
+        docVendor.msFullscreenElement
+      );
+      if (!isNativeFs && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    document.addEventListener('mozfullscreenchange', handleFsChange);
+    document.addEventListener('MSFullscreenChange', handleFsChange);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      document.removeEventListener('mozfullscreenchange', handleFsChange);
+      document.removeEventListener('MSFullscreenChange', handleFsChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen, toggleFullscreen]);
 
   const toggleMute = () => {
     if (!videoRef.current) return;
@@ -386,50 +484,16 @@ export function VideoPlayer({
           </span>
         </div>
 
-        {/* Seletor de Resolução / Camadas do Simulcast (Segmented Control) */}
+        {/* Status da Transmissão */}
         {!isLocal ? (
-          <div className="flex items-center bg-zinc-900/90 p-0.5 rounded-lg border border-zinc-800/80 shrink-0 scale-90 sm:scale-100 origin-right">
-            <button
-              type="button"
-              onClick={() => handleQualityChange(VideoQuality.LOW)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
-                selectedQuality === VideoQuality.LOW
-                  ? 'bg-zinc-800 text-zinc-100 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="360p • Economia máxima de dados"
-            >
-              360p
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQualityChange(VideoQuality.MEDIUM)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
-                selectedQuality === VideoQuality.MEDIUM
-                  ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="720p • Modo equilibrado"
-            >
-              720p
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQualityChange(VideoQuality.HIGH)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer ${
-                selectedQuality === VideoQuality.HIGH
-                  ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="1080p60 • Qualidade total"
-            >
-              1080p60
-            </button>
-          </div>
-        ) : (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Transmitindo 1080p60</span>
+            <span>AO VIVO</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-400 text-[11px] font-medium shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <span>Transmitindo</span>
           </div>
         )}
       </div>
@@ -437,7 +501,14 @@ export function VideoPlayer({
       {/* Wrapper de Ancoragem para transferência segura no PiP */}
       <div ref={wrapperRef} className="relative w-full aspect-video bg-black flex items-center justify-center">
         {/* Container do Vídeo + HUD */}
-        <div ref={containerRef} className="relative w-full h-full bg-black flex items-center justify-center group overflow-hidden">
+        <div
+          ref={containerRef}
+          className={`${
+            isFullscreen
+              ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center group overflow-hidden'
+              : 'relative w-full h-full bg-black flex items-center justify-center group overflow-hidden'
+          }`}
+        >
           <video
             ref={videoRef}
             autoPlay
@@ -445,8 +516,8 @@ export function VideoPlayer({
             muted={isMuted}
             onVolumeChange={(e) => {
               const el = e.currentTarget;
-              if (el.muted !== isMuted) setIsMuted(el.muted);
-              if (el.volume !== volume) setVolume(el.volume);
+              if (el.muted !== isMutedRef.current) setIsMuted(el.muted);
+              if (Math.abs(el.volume - volumeRef.current) > 0.01) setVolume(el.volume);
             }}
             className="w-full h-full object-contain"
           />

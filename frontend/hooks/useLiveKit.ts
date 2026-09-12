@@ -14,7 +14,12 @@ import {
 import { patchUrlMappings } from '@discord/embedded-app-sdk';
 
 // 🛡️ Contorna a CSP do Discord Activity Proxy mapeando chamadas externas do LiveKit
-if (typeof window !== 'undefined') {
+// ATENÇÃO: Só deve interceptar o fetch/WebSocket se estiver REALMENTE dentro do iframe do Discord (*.discordsays.com)
+if (
+  typeof window !== 'undefined' &&
+  (window.location.hostname.includes('discordsays.com') ||
+   window.location.hostname.includes('discord.com'))
+) {
   try {
     patchUrlMappings([
       {
