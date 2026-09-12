@@ -1,15 +1,38 @@
 services:
+  redis:
+    container_name: ecolive-redis
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
   livekit:
     container_name: ecolive-livekit
     image: livekit/livekit-server:latest
     restart: unless-stopped
     command: --config /etc/livekit.yaml --node-ip 127.0.0.1
+    depends_on:
+      - redis
     ports:
       - "7880:7880"
       - "7881:7881"
       - "50000-50050:50000-50050/udp"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
+
+  ingress:
+    container_name: ecolive-ingress
+    image: livekit/ingress:latest
+    restart: unless-stopped
+    command: --config /etc/ingress.yaml
+    depends_on:
+      - livekit
+      - redis
+    ports:
+      - "8085:8085"
+      - "7885:7885/udp"
+    volumes:
+      - ./ingress.yaml:/etc/ingress.yaml
 
   ngrok:
     container_name: ecolive-ngrok

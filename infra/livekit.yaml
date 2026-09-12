@@ -18,4 +18,12 @@ keys:
 
 logging:
   level: info
+
+# Conexão interna para coordenação de Ingress (WHIP)
+redis:
+  address: redis:6379
+
+ingress:
+  whip_base_url: http://127.0.0.1:8085/w
+
 

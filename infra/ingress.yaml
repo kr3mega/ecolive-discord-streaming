@@ -1,0 +1,9 @@
+api_key: devkey
+api_secret: "secret-super-seguro-para-desenvolvimento-local-32"
+ws_url: ws://livekit:7880
+redis:
+  address: redis:6379
+whip_port: 8085
+http_relay_port: 9090
+logging:
+  level: info

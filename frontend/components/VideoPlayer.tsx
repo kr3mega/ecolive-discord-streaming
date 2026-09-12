@@ -212,13 +212,13 @@ export function VideoPlayer({
       <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-zinc-800">
         <div className="flex items-center gap-2 truncate">
           <span
-            className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${
+            className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider flex items-center gap-1.5 ${
               isObs
-                ? 'bg-purple-900/60 text-purple-300 border border-purple-700/50'
+                ? 'bg-purple-900/70 text-purple-300 border border-purple-600/50 shadow-sm shadow-purple-900/30'
                 : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
             }`}
           >
-            {isObs ? 'OBS Ingestion' : 'PlayWeb Casual'}
+            {isObs ? '🟣 OBS Streamer (WHIP)' : '🌐 PlayWeb Casual'}
           </span>
           <span className="text-xs font-semibold text-zinc-200 truncate">
             {participantName || participantIdentity}
@@ -270,13 +270,24 @@ export function VideoPlayer({
           />
 
           {/* HUD de Telemetria (Bitrate / FPS / Resolução) */}
-          <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3 py-1 rounded border border-white/10 flex items-center gap-2 text-xs font-mono select-none z-20 pointer-events-none">
+          <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-2.5 text-xs font-mono select-none z-20 pointer-events-none shadow-xl">
             <span className="text-zinc-100 font-bold">{stats.resolution}</span>
-            <span className="text-zinc-500">•</span>
-            <span className={stats.fps >= 55 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-              {stats.fps} FPS
+            <span className="text-zinc-600">•</span>
+            
+            {/* Indicador de Taxa de Quadros (Suporte a 120 FPS Ultra) */}
+            <span
+              className={
+                stats.fps >= 100
+                  ? 'text-cyan-300 font-extrabold flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]'
+                  : stats.fps >= 55
+                  ? 'text-emerald-400 font-bold'
+                  : 'text-amber-400 font-bold'
+              }
+            >
+              {stats.fps >= 100 ? `⚡ ${stats.fps} FPS ULTRA` : `${stats.fps} FPS`}
             </span>
-            <span className="text-zinc-500">•</span>
+
+            <span className="text-zinc-600">•</span>
             <span className="text-zinc-200">{stats.bitrate} kbps</span>
           </div>
 
