@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { VideoPlayer } from '@/components/VideoPlayer';
 
@@ -18,6 +18,17 @@ export default function Home() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  // Auto-detecta o ID do canal de voz do Discord caso aberto como Discord Activity
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const discordChannel = params.get('channel_id');
+      if (discordChannel) {
+        setChannelId(discordChannel);
+      }
+    }
+  }, []);
 
   // Estados do Modal de Transmissão (Web vs OBS)
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
@@ -116,8 +127,37 @@ export default function Home() {
     }
   };
 
-  const copyToClipboard = (text: string, fieldName: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    let success = false;
+    // 1. Tenta a API moderna da Clipboard
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        success = true;
+      }
+    } catch {
+      // Ignora bloqueio de política do iframe do Discord
+    }
+
+    // 2. Fallback clássico compatível com iframes do Discord
+    if (!success && typeof document !== 'undefined') {
+      try {
+        const tempTextArea = document.createElement('textarea');
+        tempTextArea.value = text;
+        tempTextArea.style.position = 'fixed';
+        tempTextArea.style.top = '0';
+        tempTextArea.style.left = '0';
+        tempTextArea.style.opacity = '0';
+        document.body.appendChild(tempTextArea);
+        tempTextArea.focus();
+        tempTextArea.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(tempTextArea);
+      } catch {
+        // Ignora caso também falhe
+      }
+    }
+
     setCopiedField(fieldName);
     setTimeout(() => setCopiedField(null), 2500);
   };
@@ -134,7 +174,7 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold tracking-tight text-zinc-100">EcoLive</h1>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                v0.5.0
+                v0.6.0
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
@@ -323,6 +363,7 @@ export default function Home() {
                   <VideoPlayer
                     key={feed.publication.trackSid}
                     publication={feed.publication}
+                    participant={feed.participant}
                     participantIdentity={feed.participantIdentity}
                     participantName={feed.participantName}
                     isObs={feed.isObs}
@@ -431,14 +472,18 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => copyToClipboard(whipCredentials.serverUrl, 'obs_url')}
-                          className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+                          className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
                         >
                           {copiedField === 'obs_url' ? '✓ Copiado!' : 'Copiar'}
                         </button>
                       </div>
-                      <div className="bg-zinc-900/90 border border-zinc-800 px-3.5 py-2.5 rounded-xl font-mono text-xs text-zinc-200 select-all truncate">
-                        {whipCredentials.serverUrl}
-                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={whipCredentials.serverUrl}
+                        onClick={(e) => e.currentTarget.select()}
+                        className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
+                      />
                     </div>
 
                     {/* Chave de Transmissão */}
@@ -456,19 +501,23 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => copyToClipboard(whipCredentials.streamKey, 'obs_key')}
-                            className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+                            className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
                           >
                             {copiedField === 'obs_key' ? '✓ Copiado!' : 'Copiar'}
                           </button>
                         </div>
                       </div>
-                      <div className="bg-zinc-900/90 border border-zinc-800 px-3.5 py-2.5 rounded-xl font-mono text-xs text-zinc-200 select-all truncate">
-                        {showKey ? whipCredentials.streamKey : '••••••••••••••••••••••••'}
-                      </div>
+                      <input
+                        type={showKey ? 'text' : 'password'}
+                        readOnly
+                        value={whipCredentials.streamKey}
+                        onClick={(e) => e.currentTarget.select()}
+                        className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
+                      />
                     </div>
 
                     <div className="pt-2 text-[11px] text-zinc-400 border-t border-zinc-800/80 leading-relaxed">
-                      No OBS, vá em <strong>Configurações ➔ Transmissão</strong>, selecione <strong>Serviço: WHIP</strong>, cole os dados e clique em <strong>Iniciar Transmissão</strong>.
+                      Dica: Clique dentro do campo para selecionar tudo e aperte <strong className="text-zinc-200">Ctrl + C</strong>, ou use o botão <strong>Copiar</strong>. No OBS, vá em <strong>Configurações ➔ Transmissão</strong>, selecione <strong>Serviço: WHIP</strong> e cole os dados.
                     </div>
                   </div>
                 ) : null}

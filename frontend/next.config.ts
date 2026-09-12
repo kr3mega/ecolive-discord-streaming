@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   allowedDevOrigins: [
     "*.ngrok-free.dev",
     "*.ngrok-free.app",
@@ -8,6 +9,7 @@ const nextConfig: NextConfig = {
     "drinking-lusty-outweigh.ngrok-free.dev",
     "*.trycloudflare.com",
     "taken-eligibility-uniprotkb-magical.trycloudflare.com",
+    "*.discordsays.com",
   ],
   async rewrites() {
     return [

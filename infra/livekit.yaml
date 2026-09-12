@@ -3,7 +3,10 @@ rtc:
   tcp_port: 7881
   port_range_start: 50000
   port_range_end: 50050
-  use_external_ip: false
+  use_external_ip: true
+  skip_external_ip_validation: true
+  advertise_internal_ip: true
+  enable_loopback_candidate: true
   allow_tcp_fallback: true
 
 # 💰 FinOps: Teto de Banda do Nó (50 MB/s = 400 Mbps para comportar múltiplos streams 120 FPS)

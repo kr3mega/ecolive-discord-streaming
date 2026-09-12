@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { RemoteTrackPublication, VideoQuality, LocalVideoTrack } from 'livekit-client';
+import {
+  RemoteTrackPublication,
+  VideoQuality,
+  LocalVideoTrack,
+  Participant,
+  ParticipantEvent,
+  Track,
+} from 'livekit-client';
 
 interface VideoPlayerProps {
   publication?: RemoteTrackPublication;
+  participant?: Participant;
   localTrack?: LocalVideoTrack | null;
   participantIdentity: string;
   participantName?: string;
@@ -21,6 +29,7 @@ interface StreamStats {
 
 export function VideoPlayer({
   publication,
+  participant,
   localTrack,
   participantIdentity,
   participantName,
@@ -36,6 +45,8 @@ export function VideoPlayer({
   const [selectedQuality, setSelectedQuality] = useState<VideoQuality>(VideoQuality.HIGH);
   const [isPipActive, setIsPipActive] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [volume, setVolume] = useState<number>(1);
+  const lastVolumeRef = useRef<number>(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -69,6 +80,37 @@ export function VideoPlayer({
       };
     }
   }, [publication, localTrack, selectedQuality]);
+
+  // 1.1 Anexa trilhas de áudio do participante ao elemento de vídeo para reprodução sonora sincronizada
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || isLocal || !participant) return;
+
+    // Anexa trilhas existentes
+    participant.audioTrackPublications.forEach((pub) => {
+      if (pub.track && videoEl) {
+        pub.track.attach(videoEl);
+      }
+    });
+
+    // Escuta novas trilhas de áudio publicadas
+    const handleTrackSubscribed = (track: Track) => {
+      if (track.kind === Track.Kind.Audio && videoEl) {
+        track.attach(videoEl);
+      }
+    };
+
+    participant.on(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
+
+    return () => {
+      participant.off(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
+      participant.audioTrackPublications.forEach((pub) => {
+        if (pub.track && videoEl) {
+          pub.track.detach(videoEl);
+        }
+      });
+    };
+  }, [participant, isLocal]);
 
   // 2. Telemetria WebRTC (Resolução, FPS e Bitrate real decodificado)
   useEffect(() => {
@@ -230,9 +272,33 @@ export function VideoPlayer({
   };
 
   const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !videoRef.current.muted;
-      setIsMuted(videoRef.current.muted);
+    if (!videoRef.current) return;
+    if (isMuted) {
+      const targetVol = lastVolumeRef.current > 0 ? lastVolumeRef.current : 1;
+      videoRef.current.muted = false;
+      videoRef.current.volume = targetVol;
+      setIsMuted(false);
+      setVolume(targetVol);
+    } else {
+      lastVolumeRef.current = volume;
+      videoRef.current.muted = true;
+      setIsMuted(true);
+    }
+  };
+
+  const handleVolumeChange = (newVal: number) => {
+    setVolume(newVal);
+    if (!videoRef.current) return;
+    videoRef.current.volume = newVal;
+    if (newVal > 0) {
+      lastVolumeRef.current = newVal;
+      if (isMuted) {
+        videoRef.current.muted = false;
+        setIsMuted(false);
+      }
+    } else {
+      videoRef.current.muted = true;
+      setIsMuted(true);
     }
   };
 
@@ -351,28 +417,65 @@ export function VideoPlayer({
 
           {/* Dock Flutuante de Controles (Áudio / PiP / Fullscreen com Ícones SVG) */}
           <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl z-20 opacity-80 group-hover:opacity-100 transition-all duration-200">
-            {/* Botão de Áudio (Mutar / Desmutar) */}
-            <button
-              type="button"
-              onClick={toggleMute}
-              className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                isMuted
-                  ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
-                  : 'text-zinc-300 hover:text-white hover:bg-zinc-800/80'
-              }`}
-              title={isMuted ? 'Desmutar Áudio' : 'Mutar Áudio'}
-            >
-              {isMuted ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-              )}
-            </button>
+            {/* Contêiner do Botão de Áudio + Regulador Vertical no Hover */}
+            <div className="relative group/volume flex items-center justify-center">
+              {/* Regulador Vertical Flutuante (Aparece ao passar o mouse sobre o ícone de som) */}
+              <div className="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 hidden group-hover/volume:flex flex-col items-center gap-2 bg-zinc-950/95 backdrop-blur-md px-2.5 py-3 rounded-2xl border border-white/10 shadow-2xl z-30 transition-all duration-200">
+                {/* Rótulo de Porcentagem */}
+                <span className="text-[10px] font-mono font-bold text-zinc-300 select-none">
+                  {isMuted || volume === 0 ? '0%' : `${Math.round(volume * 100)}%`}
+                </span>
+                
+                {/* Slider Vertical */}
+                <div className="h-28 flex items-center justify-center py-1">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                    className="cursor-pointer accent-indigo-500 h-24 w-1.5 rounded-lg bg-zinc-800"
+                    style={{
+                      writingMode: 'vertical-lr',
+                      direction: 'rtl',
+                      WebkitAppearance: 'slider-vertical',
+                    }}
+                    title={`Volume: ${Math.round(volume * 100)}%`}
+                  />
+                </div>
+
+                {/* Ponte invisível para evitar perda do hover ao mover o mouse */}
+                <div className="absolute top-full left-0 w-full h-3" />
+              </div>
+
+              {/* Botão de Áudio (Mutar / Desmutar) */}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className={`p-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  isMuted || volume === 0
+                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                    : 'text-zinc-300 hover:text-white hover:bg-zinc-800/80'
+                }`}
+                title={isMuted || volume === 0 ? 'Desmutar Áudio' : `Mutar Áudio (${Math.round(volume * 100)}%)`}
+              >
+                {isMuted || volume === 0 ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  </svg>
+                ) : volume < 0.5 ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                )}
+              </button>
+            </div>
 
             {/* Botão Picture-in-Picture */}
             <button

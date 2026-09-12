@@ -11,11 +11,27 @@ import {
   LocalVideoTrack,
   Participant,
 } from 'livekit-client';
+import { patchUrlMappings } from '@discord/embedded-app-sdk';
+
+// 🛡️ Contorna a CSP do Discord Activity Proxy mapeando chamadas externas do LiveKit
+if (typeof window !== 'undefined') {
+  try {
+    patchUrlMappings([
+      {
+        prefix: '/livekit',
+        target: 'gauge-gateway-asylum-margin.trycloudflare.com',
+      },
+    ]);
+  } catch (err) {
+    console.warn('patchUrlMappings inicializado fora do contexto de iframe do Discord:', err);
+  }
+}
 
 export interface StreamFeed {
   participantIdentity: string;
   participantName?: string;
   publication: RemoteTrackPublication;
+  participant?: Participant;
   isObs: boolean;
 }
 
@@ -77,6 +93,7 @@ export function useLiveKit() {
               participantIdentity: participant.identity,
               participantName: participant.name,
               publication: publication as RemoteTrackPublication,
+              participant,
               isObs,
             },
           ]);
@@ -101,7 +118,19 @@ export function useLiveKit() {
         setRemoteFeeds([]);
       });
 
-      await room.connect(serverUrl || 'ws://127.0.0.1:7880', token);
+      // Se estiver rodando dentro do iframe do Discord (*.discordsays.com),
+      // direcionamos a conexão para o proxy mapeado /livekit na mesma origem para contornar a CSP
+      let targetUrl = serverUrl || 'ws://127.0.0.1:7880';
+      if (
+        typeof window !== 'undefined' &&
+        (window.location.hostname.includes('discordsays.com') ||
+         window.location.hostname.includes('discord.com'))
+      ) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        targetUrl = `${protocol}//${window.location.host}/livekit`;
+      }
+
+      await room.connect(targetUrl, token);
       roomRef.current = room;
       setIsConnected(true);
     } finally {
