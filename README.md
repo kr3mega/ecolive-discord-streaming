@@ -67,12 +67,12 @@ flowchart TD
     ObsUser -->|"HTTPS POST /w (Handshake WHIP)"| Caddy
     Caddy --> Ingress
 
-    ObsUser <==|"Áudio/Vídeo UDP 7885"| Ingress
+    ObsUser -->|"Áudio/Vídeo UDP 7885"| Ingress
     Ingress --- LiveKit
     LiveKit --- Redis
 
-    LiveKit <==|"WebRTC Mídia UDP 50000-50050"| WebUser
-    LiveKit <==|"WebRTC Mídia UDP 50000-50050"| DiscordUser
+    LiveKit -->|"WebRTC Mídia UDP 50000-50050"| WebUser
+    LiveKit -->|"WebRTC Mídia UDP 50000-50050"| DiscordUser
 ```
 
 ---
