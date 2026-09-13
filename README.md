@@ -1,107 +1,156 @@
+# 🍃 EcoLive v1.0.0 - Discord Streaming Platform
 
-# 🍃 EcoLive (Alpha 0.1.0) - Discord Streaming
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-emerald.svg?style=for-the-badge" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/status-production%2024%2F7-blue.svg?style=for-the-badge" alt="Production 24/7" />
+  <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
+  <img src="https://img.shields.io/badge/streaming-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
+</p>
 
-> **Ecossistema descentralizado de transmissão WebRTC de latência ultra-baixa/estável integrado a canais de voz do Discord (Discord Activity / Iframe).**  
+> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Suporta streaming direto pelo navegador e ingestão profissional via OBS Studio (WHIP) com até 120 FPS.**  
 > *Autor: Kayque Reis ([@kr3mega](https://github.com/kr3mega))*
 
 ---
 
-## 🎯 1. Objetivo do Sistema
+## 🎯 1. Visão Geral do Projeto
 
-O **EcoLive** é um mini aplicativo web (*Discord Activity / Iframe*) desenvolvido para canais de voz do Discord. O sistema entrega transmissões em tempo real com:
-- **Latência Ultra-Baixa e Estável**: Mitigação dos efeitos da distância física através do Atlântico via WebRTC SFU (*Selective Forwarding Unit*).
-- **Alta Fidelidade**: Até 1080p a 60fps / 120fps.
-- **Imunidade Anti-Cheat**: Blindagem contra bloqueios de ferramentas de kernel (como Riot Vanguard).
-- **FinOps e Alta Previsibilidade Financeira**: Operação dentro de uma infraestrutura otimizada para alto tráfego sem custos excedentes.
+O **EcoLive** é uma Atividade oficial (*Embedded App*) para o Discord desenvolvida para resolver as limitações de qualidade, estabilidade e latência de transmissões convencionais. 
+
+Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em São Paulo (Brasil), o sistema entrega vídeo de alta fidelidade (**1080p a 60 / 120 FPS**) com latência inferior a **200ms**, permitindo que amigos assistam a gameplays e interajam em tempo real como se estivessem no mesmo cômodo.
 
 ---
 
-## 🎥 2. Arquitetura Híbrida de Captura (3 Modalidades)
+## ⚡ 2. Principais Funcionalidades & Diferenciais
 
-A arquitetura foi desenhada com base em *"camadas progressivas de fricção e segurança"*, aceitando conexões simultâneas das três modalidades na mesma sala:
-
-| Modalidade | Mecanismo | UX & Segurança |
-| :--- | :--- | :--- |
-| **1. PlayWeb Casual** *(Nativo no Iframe)* | `navigator.mediaDevices.getDisplayMedia` | **Porto Seguro:** Zero downloads, zero scripts, 100% isolado na sandbox do Discord. Suporta Aba, Janela ou Tela Inteira. |
-| **2. OBS Auto-config** *(Para Leigos)* | Geração dinâmica de endpoint WHIP (*WebRTC HTTP Ingestion*) | **Anti-Cheat & Áudio do PC:** Fornece URL do WHIP + Bearer Token com guia visual de 3 passos "copiar e colar" para o OBS Studio. Não requer scripts locais. |
-| **3. OBS Streamer** *(Power Users)* | Ingestão manual WHIP orientada à preservação de perfil | **Duplicação de Perfil:** Isola a transmissão para o EcoLive mantendo intactos perfis complexos, encoders dedicados (NVENC/AMF/AV1) e blindando a Stream Key da Twitch/YouTube. |
-
----
-
-## 🛡️ 3. Logística de Isolamento, IDs e Concorrência (Multistream)
-
-- **Isolamento de Chamadas (Rooms):** O ID da sala no servidor é rigorosamente o ID do Canal de Voz do Discord (`channel_id`), globalmente exclusivo. Canais distintos rodam em universos WebRTC 100% isolados.
-- **Concorrência (Grid Multi Stream):** Múltiplos publicadores compartilham a mesma sala. Transmissores PlayWeb e transmissores OBS compartilham a mesma grid dinâmica em mosaico.
-- **Identidade Única (Participant Identity):**
-  - PlayWeb Casual assume: `user_[Discord_User_ID]`
-  - Modos OBS assumem: `obs_[Discord_User_ID]`
+* **🚀 Latência Ultra-Baixa Real (< 200ms):** Conexão direta WebRTC via UDP sobre SFU, sendo de **10 a 20 vezes mais rápida** que plataformas tradicionais como Twitch e YouTube.
+* **🎥 Dupla Modalidade de Transmissão:**
+  * **PlayWeb Casual (Nativo no Iframe):** Captura de tela com 1 clique diretamente pelo navegador (`getDisplayMedia`). Zero downloads, zero scripts, rodando isolado na sandbox do Discord com Simulcast por hardware em 3 camadas.
+  * **OBS Studio Profissional (WHIP):** Ingestão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat de nível de Kernel (Riot Vanguard, Easy Anti-Cheat).
+* **🖥️ Grid Dinâmico Multistream:** Vários usuários podem transmitir simultaneamente na mesma sala de voz, exibidos em um layout mosaico inteligente e responsivo.
+* **📊 HUD de Telemetria em Tempo Real:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e Perda de Pacotes (*Packet Loss*).
+* **☁️ Infraestrutura Autônoma 24/7:** Hospedado em VPS com link de 1 Gbit/s em São Paulo, Proxy Reverso Caddy com certificados SSL automáticos da Let's Encrypt (`*.sslip.io`) e reinicialização automática em containers Docker.
 
 ---
 
-## 💰 4. Infraestrutura, FinOps & Segurança Zero-Leakage
+## 🏗️ 3. Arquitetura do Sistema
 
-O projeto opera sob uma estratégia de **validação de custo zero e máxima segurança**:
-- **Ambiente Local via Docker:** Servidor LiveKit SFU de alta performance rodando localmente sem custos de infraestrutura de nuvem nesta fase de validação.
-- **Túnel Seguro via Ngrok:** Exposição do frontend HTTPS e da sinalização WSS com criptografia TLS ponta a ponta para homologação imediata no ecossistema de Activities do Discord.
-- **Cap Inteligente (FinOps):** Teto de Bitrate de 8 Mbps configurado via `livekit.yaml` (`limit.bytes_per_sec: 1000000`).
-- **🛡️ Isolamento Estrito de Credenciais (Server-Side Only):**
-  - **Zero-Leakage no Frontend:** Nenhuma chave de API, secret ou authtoken possui o prefixo `NEXT_PUBLIC_`. Elas residem exclusivamente no runtime do servidor Node.js/Next.js.
-  - **Tokens com TTL de Curta Duração:** O frontend recebe apenas JWTs temporários assinados com prazo de expiração estrito.
-  - **Anti-Cache:** Respostas de autenticação possuem cabeçalhos `Cache-Control: no-store` para impedir armazenamento em proxies intermediários.
+```mermaid
+flowchart TD
+    subgraph Clients ["👥 Clientes & Transmissores"]
+        WebUser["🌐 PlayWeb Casual\n(Navegador / DisplayMedia)"]
+        ObsUser["🎥 OBS Studio\n(WHIP Passthrough 120 FPS)"]
+        DiscordUser["🎮 Discord App / Web / Mobile\n(Espectadores no Canal de Voz)"]
+    end
 
----
+    subgraph VPS ["☁️ VPS na Nuvem (São Paulo - 24/7)"]
+        subgraph Edge ["Borda Segura"]
+            Caddy["🔒 Caddy Reverse Proxy\n(Portas 80 / 443 - SSL Let's Encrypt)"]
+        end
 
-## 🗺️ 5. Roadmap de Execução Consolidado
+        subgraph DockerStack ["Docker Compose Cluster (restart: always)"]
+            Frontend["⚡ Next.js 16 Web App\n(Container Frontend :3000)"]
+            LiveKit["📡 LiveKit SFU Media Server\n(Portas :7880 WS / :50000-50050 UDP)"]
+            Ingress["📥 LiveKit Ingress\n(Porta :8085 WHIP / :7885 UDP)"]
+            Redis["📦 Redis Alpine\n(Coordenação de Salas e Sessões)"]
+        end
+    end
 
-- [x] **Fase 1: O Coração da Mídia (Ambiente Local)**
-  - [x] Container LiveKit Server (`ecolive-livekit`) configurado com limites FinOps e portas UDP.
-  - [x] Frontend Next.js com PlayWeb Casual (`getDisplayMedia`) e Simulcast em 3 camadas por hardware a 60 FPS.
-  - [x] Grid Multi Stream dinâmico em mosaico e HUD de telemetria em tempo real no `VideoPlayer`.
-- [x] **Fase 2: O Túnel Seguro & Blindagem de Credenciais (Ngrok + Zero-Leakage)**
-  - [x] Configuração declarativa de túneis seguros via `infra/ngrok.yml` e Docker Compose.
-  - [x] Remoção de todas as variáveis `NEXT_PUBLIC_` para isolamento total de chaves e segredos no servidor.
-  - [x] Proteção global de credenciais via `.gitignore` raiz e criação de templates `.env.example`.
-  - [x] Rota `/api/token` blindada com TTL curto e cabeçalhos anti-cache.
-- [ ] **Fase 3: Bot do Discord & Sensor de Presença Local**
-  - [ ] Bot local no Discord (`discord.js`) atuando como monitor de presença no canal de voz.
-  - [ ] Comandos Slash para iniciar e consultar o status da sessão do EcoLive.
-- [ ] **Fase 4: O Encaixe Perfeito (Discord Embedded App)**
-  - [ ] Integração do `@discord/embedded-app-sdk` no frontend para contexto do usuário (avatar, username).
-  - [ ] Validação das modalidades PlayWeb e OBS diretamente dentro do Iframe oficial do Discord.
+    WebUser -->|"HTTPS (Acesso Web)"| Caddy
+    DiscordUser -->|"HTTPS (Iframe discordsays.com)"| Caddy
+    Caddy --> Frontend
 
----
+    WebUser -->|"WSS (Sinalização)"| Caddy
+    DiscordUser -->|"WSS (Sinalização)"| Caddy
+    Caddy --> LiveKit
 
-## 🚀 Como Executar Localmente
+    ObsUser -->|"HTTPS POST /w (Handshake WHIP)"| Caddy
+    Caddy --> Ingress
 
-### 1. Iniciar o SFU Local (LiveKit Server)
-```bash
-cd infra
-docker compose up -d
+    ObsUser <==|"Áudio/Vídeo UDP 7885"| Ingress
+    Ingress --- LiveKit
+    LiveKit --- Redis
+
+    LiveKit <==|"WebRTC Mídia UDP 50000-50050"| WebUser
+    LiveKit <==|"WebRTC Mídia UDP 50000-50050"| DiscordUser
 ```
-Verifique se o servidor está ativo em `http://127.0.0.1:7880` (deve retornar `OK`).
 
-### 2. Iniciar o Frontend (Next.js)
-Em outro terminal:
+---
+
+## 🛠️ 4. Stack Tecnológica
+
+| Camada | Tecnologias Utilizadas |
+| :--- | :--- |
+| **Frontend** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack), [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS v4](https://tailwindcss.com/) |
+| **Streaming & WebRTC** | [LiveKit Client SDK](https://github.com/livekit/client-sdk-js), [LiveKit React Components](https://github.com/livekit/components-js), LiveKit Server SDK |
+| **Integração Discord** | [@discord/embedded-app-sdk](https://github.com/discord/embedded-app-sdk) |
+| **Servidores de Mídia** | [LiveKit Server](https://github.com/livekit/livekit) (Go SFU), [LiveKit Ingress](https://github.com/livekit/ingress) (WHIP Server), [Redis](https://redis.io/) (Alpine) |
+| **Borda e Segurança** | [Caddy Server](https://caddyserver.com/) (HTTP/3, TLS automático Let's Encrypt), UFW Firewall |
+| **Infraestrutura** | [Docker](https://www.docker.com/) & Docker Compose, Ubuntu 24.04 LTS (Datacenter em São Paulo) |
+
+---
+
+## 🔒 5. Segurança & Isolamento de Credenciais (Zero-Leakage)
+
+* **Zero-Leakage no Frontend:** Nenhuma chave secreta ou authtoken sensível reside no código do cliente ou usa o prefixo `NEXT_PUBLIC_`.
+* **Tokens JWT de Curta Duração:** Os tokens de acesso à sala WebRTC são gerados dinamicamente via `/api/token` com TTL de 4 horas e assinados no backend.
+* **Isolamento de Salas:** As salas são vinculadas rigidamente ao `channel_id` do canal de voz do Discord. Usuários em canais de voz diferentes operam em universos WebRTC 100% isolados.
+* **Anti-Cache:** Todas as respostas da API de credenciais contam com cabeçalhos `Cache-Control: no-store, no-cache, must-revalidate` para mitigar armazenamento em proxies intermediários.
+
+---
+
+## 🚀 6. Como Executar Localmente (Ambiente de Desenvolvimento)
+
+### Pré-requisitos
+* [Node.js](https://nodejs.org/) v20+ e `npm`
+* [Docker](https://www.docker.com/) e Docker Compose (opcional caso queira rodar o SFU localmente)
+
+### 1. Clonar o Repositório
+```bash
+git clone https://github.com/kr3mega/ecolive-discord-streaming.git
+cd ecolive-discord-streaming
+```
+
+### 2. Configurar o Frontend
 ```bash
 cd frontend
+cp .env.example .env.local
+npm install
 npm run dev
 ```
 Acesse `http://localhost:3000` no seu navegador.
 
-### 3. (Opcional) Iniciar o Túnel Seguro do Ngrok
-Para expor a aplicação em HTTPS público para testes no Discord:
-1. Configure seu authtoken no arquivo `infra/.env` (veja `infra/.env.example`).
-2. Execute o script:
-```powershell
-cd infra
-.\start-tunnel.ps1
+### 3. (Opcional) Subir o Cluster Local via Docker
+Caso queira rodar o SFU LiveKit na sua máquina:
+```bash
+cd ../infra
+docker compose up -d
 ```
+
+---
+
+## 🎮 7. Configuração no Discord Developer Portal
+
+Para registrar a aplicação como uma **Atividade oficial do Discord**:
+
+1. Acesse o [Discord Developer Portal](https://discord.com/developers/applications).
+2. Selecione seu aplicativo e navegue até **Atividades ➔ Mapeamentos de URL**.
+3. Configure os mapeamentos:
+   * **Mapeamento de raízes (`/`):** Aponte para o domínio do seu frontend (ex: `124-198-128-214.sslip.io`).
+   * **Mapeamentos de caminho proxy (`/livekit`):** Aponte para o domínio do LiveKit (ex: `lk.124-198-128-214.sslip.io`).
+4. Salve as alterações. O aplicativo estará pronto para ser iniciado em qualquer canal de voz através do ícone do foguete (🚀).
 
 ---
 
 ## ⚖️ Licença e Direitos Autorais
 
-Este é um projeto proprietário e de portfólio pessoal de **Kayque Reis**. Todos os direitos reservados.
-Proibida a reprodução ou uso comercial não autorizado.
+Este é um projeto proprietário e de portfólio pessoal desenvolvido por **Kayque Reis**.  
+Todos os direitos estão reservados.
 
+Recrutadores, desenvolvedores e visitantes têm total permissão para visualizar, auditar e clonar o repositório para fins de avaliação técnica e estudo. É proibida a redistribuição ou exploração comercial não autorizada de qualquer parte deste código sem autorização prévia por escrito do autor.
 
+---
+
+<p align="center">
+  Desenvolvido com 💚 por <a href="https://github.com/kr3mega">Kayque Reis</a>.
+</p>
