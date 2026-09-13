@@ -18,6 +18,9 @@ interface VideoPlayerProps {
   participantName?: string;
   isObs?: boolean;
   isLocal?: boolean;
+  isWatching?: boolean;
+  onToggleWatch?: (watching: boolean) => void;
+  avatarUrl?: string;
 }
 
 interface StreamStats {
@@ -36,10 +39,38 @@ export function VideoPlayer({
   participantName,
   isObs = false,
   isLocal = false,
+  isWatching: controlledWatching,
+  onToggleWatch,
+  avatarUrl,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Extrai avatar dos metadados do participante (LiveKit) ou da prop avatarUrl (Discord SDK)
+  const effectiveAvatar = (() => {
+    if (avatarUrl) return avatarUrl;
+    if (participant?.metadata) {
+      try {
+        const parsed = JSON.parse(participant.metadata);
+        if (parsed.avatar) return parsed.avatar as string;
+      } catch {}
+    }
+    return undefined;
+  })();
+
+  // Estado sob demanda: Transmissão local é sempre ativa; transmissões remotas iniciam pausadas por padrão
+  const [internalWatching, setInternalWatching] = useState<boolean>(isLocal);
+  const activeWatching = isLocal ? true : (controlledWatching !== undefined ? controlledWatching : internalWatching);
+
+  const handleToggleWatch = useCallback((targetState?: boolean) => {
+    const nextState = targetState !== undefined ? targetState : !activeWatching;
+    if (onToggleWatch) {
+      onToggleWatch(nextState);
+    } else {
+      setInternalWatching(nextState);
+    }
+  }, [activeWatching, onToggleWatch]);
 
   const [stats, setStats] = useState<StreamStats>({ resolution: '0x0', fps: 0, bitrate: 0 });
   const [isPipActive, setIsPipActive] = useState(false);
@@ -94,7 +125,32 @@ export function VideoPlayer({
     };
   }, [isFullscreen]);
 
-  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo
+  // 0. Sincroniza estado de recepção no LiveKit SFU (0 Mbps quando não assistindo)
+  useEffect(() => {
+    if (isLocal) return;
+
+    if (publication) {
+      publication.setEnabled(activeWatching);
+    }
+
+    if (participant) {
+      participant.audioTrackPublications.forEach((pub) => {
+        if (pub instanceof RemoteTrackPublication) {
+          pub.setEnabled(activeWatching);
+        }
+      });
+    }
+  }, [activeWatching, publication, participant, isLocal]);
+
+  // Se o usuário fechar a transmissão, encerra Fullscreen e PiP caso estejam ativos
+  useEffect(() => {
+    if (!activeWatching) {
+      if (isFullscreen) setIsFullscreen(false);
+      if (isPipActive) setIsPipActive(false);
+    }
+  }, [activeWatching, isFullscreen, isPipActive]);
+
+  // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo somente se activeWatching
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
@@ -106,7 +162,7 @@ export function VideoPlayer({
       };
     }
 
-    if (publication?.track) {
+    if (activeWatching && publication?.track) {
       publication.track.attach(videoEl);
       publication.setVideoQuality(VideoQuality.HIGH);
 
@@ -115,14 +171,26 @@ export function VideoPlayer({
           publication.track.detach(videoEl);
         }
       };
+    } else if (publication?.track && videoEl) {
+      publication.track.detach(videoEl);
     }
-  }, [publication, localTrack]);
+  }, [publication, localTrack, activeWatching]);
 
-  // 1.1 Anexa trilhas de áudio do participante ao elemento de vídeo para reprodução sonora sincronizada
+  // 1.1 Anexa trilhas de áudio do participante ao elemento de vídeo somente se activeWatching
   // OBS: Não depende de [isMuted, volume] para evitar detach/attach da trilha e piscamento preto ao arrastar o slider
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || isLocal || !participant) return;
+
+    if (!activeWatching) {
+      // Se não está assistindo, desanexa qualquer trilha de áudio
+      participant.audioTrackPublications.forEach((pub) => {
+        if (pub.track && videoEl) {
+          pub.track.detach(videoEl);
+        }
+      });
+      return;
+    }
 
     // Anexa trilhas existentes e garante sincronismo imediato de áudio
     participant.audioTrackPublications.forEach((pub) => {
@@ -135,7 +203,7 @@ export function VideoPlayer({
 
     // Escuta novas trilhas de áudio publicadas
     const handleTrackSubscribed = (track: Track) => {
-      if (track.kind === Track.Kind.Audio && videoEl) {
+      if (track.kind === Track.Kind.Audio && videoEl && activeWatching) {
         track.attach(videoEl);
         videoEl.muted = isMutedRef.current;
         videoEl.volume = volumeRef.current;
@@ -152,10 +220,21 @@ export function VideoPlayer({
         }
       });
     };
-  }, [participant, isLocal]);
+  }, [participant, isLocal, activeWatching]);
 
   // 2. Telemetria WebRTC (Resolução, FPS, Bitrate, RTT/Ping e Perda de Pacotes)
   useEffect(() => {
+    if (!activeWatching) {
+      setStats({
+        resolution: '0x0',
+        fps: 0,
+        bitrate: 0,
+        rtt: undefined,
+        packetLoss: undefined,
+      });
+      return;
+    }
+
     let lastBytes = 0;
     let lastTimestamp = 0;
 
@@ -231,7 +310,7 @@ export function VideoPlayer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [publication, localTrack]);
+  }, [publication, localTrack, activeWatching]);
 
   // 3. Document Picture-in-Picture com fallback para Standard PiP
   const togglePictureInPicture = useCallback(async () => {
@@ -460,6 +539,18 @@ export function VideoPlayer({
       {/* Barra de Controle Superior */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
+          {effectiveAvatar ? (
+            <img
+              src={effectiveAvatar}
+              alt={participantName || participantIdentity}
+              className="h-6 w-6 rounded-full object-cover border border-zinc-700/80 shrink-0 shadow-sm"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm">
+              {(participantName || participantIdentity).trim().charAt(0).toUpperCase()}
+            </div>
+          )}
           <span
             className={`px-2.5 py-1 text-[10px] font-semibold rounded-full uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${
               isLocal
@@ -484,31 +575,116 @@ export function VideoPlayer({
           </span>
         </div>
 
-        {/* Status da Transmissão */}
-        {!isLocal ? (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>AO VIVO</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-400 text-[11px] font-medium shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span>Transmitindo</span>
-          </div>
-        )}
+        {/* Status da Transmissão e Botão Parar de Assistir */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isLocal ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-400 text-[11px] font-medium">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+              <span>Transmitindo</span>
+            </div>
+          ) : (
+            <>
+              {activeWatching ? (
+                <>
+                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>AO VIVO</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleWatch(false)}
+                    className="px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-rose-900/60 border border-zinc-700/60 hover:border-rose-500/50 text-zinc-300 hover:text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Fechar transmissão para economizar internet e processador"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Parar de Assistir</span>
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 text-[11px] font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                  <span>Fechada (0 Mbps)</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Wrapper de Ancoragem para transferência segura no PiP */}
       <div ref={wrapperRef} className="relative w-full aspect-video bg-black flex items-center justify-center">
-        {/* Container do Vídeo + HUD */}
-        <div
-          ref={containerRef}
-          className={`${
-            isFullscreen
-              ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center group overflow-hidden'
-              : 'relative w-full h-full bg-black flex items-center justify-center group overflow-hidden'
-          }`}
-        >
+        {!activeWatching ? (
+          /* ESTADO DISCORD: Transmissão Fechada / Aguardando Clique */
+          <div className="relative w-full h-full bg-gradient-to-b from-zinc-900/95 via-zinc-950 to-black flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden group/idle">
+            {/* Efeito de luz ambiente de fundo */}
+            <div className="absolute inset-0 bg-radial from-indigo-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+
+            {/* Avatar / Foto de Perfil do Streamer com anel estético */}
+            <div className="relative mb-3.5 group/avatar">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-800/80 border border-zinc-700/60 shadow-2xl flex items-center justify-center text-2xl sm:text-3xl font-black text-white relative z-10 overflow-hidden">
+                {effectiveAvatar ? (
+                  <img
+                    src={effectiveAvatar}
+                    alt={participantName || participantIdentity}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-tr from-indigo-600 via-purple-600 to-emerald-600 text-white font-black text-2xl sm:text-3xl select-none">
+                    {(participantName || participantIdentity).trim().charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-indigo-500/40 via-purple-500/20 to-emerald-500/30 blur-sm animate-pulse" />
+              
+              {/* Badge indicando se a fonte é OBS (120 FPS) ou Navegador */}
+              <div
+                className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-zinc-950 shadow z-20 text-[10px] flex items-center justify-center ${
+                  isObs ? 'bg-purple-600 text-white' : 'bg-emerald-500 text-zinc-950'
+                }`}
+                title={isObs ? 'OBS Studio (WHIP)' : 'PlayWeb Casual'}
+              >
+                <span>{isObs ? '🎥' : '🌐'}</span>
+              </div>
+            </div>
+
+            {/* Nome do Streamer e Chamada */}
+            <h4 className="text-sm sm:text-base font-bold text-zinc-100 truncate max-w-[85%] mb-1">
+              {participantName || participantIdentity}
+            </h4>
+            <p className="text-[11px] sm:text-xs text-zinc-400 max-w-xs mb-4">
+              {isObs ? 'Transmissão via OBS Studio (WHIP)' : 'Compartilhamento de Tela via Navegador'}
+            </p>
+
+            {/* BOTÃO BRANCO CENTRAL ESTILO DISCORD */}
+            <button
+              type="button"
+              onClick={() => handleToggleWatch(true)}
+              className="px-6 py-2.5 sm:py-3 bg-white hover:bg-zinc-100 active:scale-95 text-zinc-950 font-bold text-xs sm:text-sm rounded-xl shadow-2xl shadow-white/10 flex items-center gap-2.5 transition-all cursor-pointer hover:shadow-indigo-500/20 group-hover/idle:scale-105"
+            >
+              <svg className="w-4 h-4 text-zinc-950 fill-current" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <span>Assistir Transmissão</span>
+            </button>
+            <span className="text-[10px] text-zinc-500 mt-2.5">
+              Clique para receber o fluxo de vídeo e áudio sem pesar sua rede
+            </span>
+          </div>
+        ) : (
+          /* Container do Vídeo + HUD */
+          <div
+            ref={containerRef}
+            className={`${
+              isFullscreen
+                ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center group overflow-hidden'
+                : 'relative w-full h-full bg-black flex items-center justify-center group overflow-hidden'
+            }`}
+          >
           <video
             ref={videoRef}
             autoPlay
@@ -665,6 +841,7 @@ export function VideoPlayer({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

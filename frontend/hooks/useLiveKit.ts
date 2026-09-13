@@ -114,7 +114,7 @@ export function useLiveKit() {
   const connectingRef = useRef(false);
 
   // Conectar ao canal do Discord via LiveKit
-  const connect = useCallback(async (channelId: string, userId: string, mode: 'web' | 'obs' = 'web', displayName?: string) => {
+  const connect = useCallback(async (channelId: string, userId: string, mode: 'web' | 'obs' = 'web', displayName?: string, avatarUrl?: string) => {
     if (connectingRef.current || roomRef.current) return;
     connectingRef.current = true;
 
@@ -124,6 +124,7 @@ export function useLiveKit() {
         userId,
         mode,
         ...(displayName ? { name: displayName } : {}),
+        ...(avatarUrl ? { avatar: avatarUrl } : {}),
       });
 
       const res = await fetch(`/api/token?${queryParams.toString()}`);
@@ -163,14 +164,23 @@ export function useLiveKit() {
 
       // Trilha remota inscrita
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant: Participant) => {
+        if (track.kind === Track.Kind.Audio) {
+          // Pausa downstream de áudio no SFU até o usuário decidir assistir
+          (publication as RemoteTrackPublication).setEnabled(false);
+        }
+
         if (track.kind === Track.Kind.Video) {
+          const remotePub = publication as RemoteTrackPublication;
+          // Pausa downstream de vídeo no SFU imediatamente (0 Mbps) até o usuário clicar em Assistir
+          remotePub.setEnabled(false);
+
           const isObs = participant.identity.startsWith('obs_');
           setRemoteFeeds((prev) => [
             ...prev.filter((f) => f.publication.trackSid !== publication.trackSid),
             {
               participantIdentity: participant.identity,
               participantName: participant.name,
-              publication: publication as RemoteTrackPublication,
+              publication: remotePub,
               participant,
               isObs,
             },
@@ -180,6 +190,11 @@ export function useLiveKit() {
 
       // Trilha desinscrita
       room.on(RoomEvent.TrackUnsubscribed, (_, publication) => {
+        setRemoteFeeds((prev) => prev.filter((f) => f.publication.trackSid !== publication.trackSid));
+      });
+
+      // Trilha despublicada pelo streamer
+      room.on(RoomEvent.TrackUnpublished, (publication) => {
         setRemoteFeeds((prev) => prev.filter((f) => f.publication.trackSid !== publication.trackSid));
       });
 

@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const channelId = body.channelId || body.room;
     const rawUserId = body.userId || body.username;
     const displayName = body.name || rawUserId;
+    const avatarUrl = body.avatar || body.avatarUrl;
 
     if (!channelId || !rawUserId) {
       return NextResponse.json(
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
       roomName: channelId,
       participantIdentity,
       participantName: displayName,
+      participantMetadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
       bypassTranscoding: true, // ⚡ Modo Passthrough: zero transcodificação na CPU, preserva 120 FPS nativos da GPU
     });
 
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
   const channelId = searchParams.get('channelId') || searchParams.get('room');
   const rawUserId = searchParams.get('userId') || searchParams.get('username');
   const displayName = searchParams.get('name') || rawUserId;
+  const avatarUrl = searchParams.get('avatar');
 
   if (!channelId || !rawUserId) {
     return NextResponse.json(
@@ -102,6 +105,7 @@ export async function GET(req: NextRequest) {
       roomName: channelId,
       participantIdentity,
       participantName: displayName || undefined,
+      participantMetadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
       bypassTranscoding: true,
     });
 

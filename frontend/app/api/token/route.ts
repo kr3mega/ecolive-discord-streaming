@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
   const rawUserId = searchParams.get('userId') || searchParams.get('username');
   const mode = searchParams.get('mode') || 'web'; // 'web' (PlayWeb Casual) ou 'obs'
   const displayName = searchParams.get('name') || rawUserId;
+  const avatarUrl = searchParams.get('avatar');
 
   if (!channelId || !rawUserId) {
     return NextResponse.json(
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
       name: displayName || undefined,
+      metadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
       ttl: '4h', // TTL curto de 4 horas para máxima segurança
     });
 

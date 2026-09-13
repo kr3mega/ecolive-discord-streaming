@@ -1,8 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { useLiveKit } from '@/hooks/useLiveKit';
 import { VideoPlayer } from '@/components/VideoPlayer';
+
+interface DiscordParticipant {
+  id: string;
+  username: string;
+  discriminator: string;
+  avatar?: string | null;
+  global_name?: string | null;
+  nickname?: string;
+}
+
+export function getDiscordAvatarUrl(userId: string, avatarHash?: string | null): string {
+  if (avatarHash) {
+    const isAnimated = avatarHash.startsWith('a_');
+    return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${isAnimated ? 'gif' : 'png'}?size=128`;
+  }
+  try {
+    const index = Number((BigInt(userId) >> BigInt(22)) % BigInt(6));
+    return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+  } catch {
+    return `https://cdn.discordapp.com/embed/avatars/0.png`;
+  }
+}
 
 interface WhipCredentials {
   serverUrl: string;
@@ -58,24 +81,96 @@ export default function Home() {
     };
   }, []);
 
-  // Auto-detecta o ID do canal de voz do Discord e restaura preferências salvas
+  // Estados de Perfil e Avatar do Discord
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
+  const [discordParticipants, setDiscordParticipants] = useState<DiscordParticipant[]>([]);
+  const [detectedDiscordUser, setDetectedDiscordUser] = useState<DiscordParticipant | null>(null);
+
+  // Auto-detecta o ID do canal de voz do Discord, participantes conectados e restaura preferências salvas
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const discordChannel = params.get('channel_id');
-      if (discordChannel) {
-        setChannelId(discordChannel);
-      }
-      const sim = params.get('simulate_external') === 'true' || params.get('simular_externo') === 'true';
-      if (sim) {
-        setIsSimulatingExternal(true);
-      }
-      const savedName = localStorage.getItem('ecolive_display_name');
-      if (savedName) {
-        setDisplayName(savedName);
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const discordChannel = params.get('channel_id');
+    if (discordChannel) {
+      setChannelId(discordChannel);
+    }
+    const sim = params.get('simulate_external') === 'true' || params.get('simular_externo') === 'true';
+    if (sim) {
+      setIsSimulatingExternal(true);
+    }
+    const savedName = localStorage.getItem('ecolive_display_name');
+    if (savedName) {
+      setDisplayName(savedName);
+    }
+    const savedAvatar = localStorage.getItem('ecolive_avatar_url');
+    if (savedAvatar) {
+      setAvatarUrl(savedAvatar);
+    }
+
+    // Se estiver rodando dentro do iframe da Discord Activity (*.discordsays.com)
+    const isDiscordActivity =
+      window.location.hostname.includes('discordsays.com') ||
+      window.location.hostname.includes('discord.com');
+
+    if (isDiscordActivity) {
+      const clientId = window.location.hostname.split('.')[0];
+      if (clientId && clientId !== 'localhost' && !clientId.includes(':')) {
+        const initDiscord = async () => {
+          try {
+            const discordSdk = new DiscordSDK(clientId);
+            await discordSdk.ready();
+            const result = await discordSdk.commands.getInstanceConnectedParticipants();
+            if (result && Array.isArray(result.participants) && result.participants.length > 0) {
+              setDiscordParticipants(result.participants);
+
+              // Tenta encontrar o participante correspondente ao usuário
+              let matched = result.participants.find(
+                (p) =>
+                  savedName && (
+                    p.username.toLowerCase() === savedName.toLowerCase() ||
+                    (p.global_name && p.global_name.toLowerCase() === savedName.toLowerCase()) ||
+                    (p.nickname && p.nickname.toLowerCase() === savedName.toLowerCase())
+                  )
+              );
+
+              // Se tiver só 1 participante na chamada, é automaticamente o usuário conectado
+              if (!matched && result.participants.length === 1) {
+                matched = result.participants[0];
+              }
+
+              if (matched) {
+                setDetectedDiscordUser(matched);
+                const chosenName = matched.nickname || matched.global_name || matched.username;
+                if (!savedName) {
+                  setDisplayName(chosenName);
+                  localStorage.setItem('ecolive_display_name', chosenName);
+                }
+                const avatar = getDiscordAvatarUrl(matched.id, matched.avatar);
+                setAvatarUrl(avatar);
+                localStorage.setItem('ecolive_avatar_url', avatar);
+              }
+            }
+          } catch (err) {
+            console.warn('[Discord SDK] Detecção de participantes indisponível ou fora do iframe:', err);
+          }
+        };
+        initDiscord();
       }
     }
   }, []);
+
+  const handleSelectDiscordParticipant = (participant: DiscordParticipant) => {
+    setDetectedDiscordUser(participant);
+    const chosenName = participant.nickname || participant.global_name || participant.username;
+    setDisplayName(chosenName);
+    const avatar = getDiscordAvatarUrl(participant.id, participant.avatar);
+    setAvatarUrl(avatar);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ecolive_display_name', chosenName);
+      localStorage.setItem('ecolive_avatar_url', avatar);
+    }
+  };
 
   // Estados do Modal de Transmissão (Web vs OBS)
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
@@ -99,6 +194,47 @@ export default function Home() {
     setQuality,
   } = useLiveKit();
 
+  // Transmissões remotas assistidas sob demanda (estilo Discord)
+  const [watchedTrackSids, setWatchedTrackSids] = useState<Set<string>>(new Set());
+
+  // Limpa SIDs de transmissões encerradas
+  useEffect(() => {
+    setWatchedTrackSids((prev) => {
+      const activeSids = new Set(remoteFeeds.map((f) => f.publication.trackSid));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((sid) => {
+        if (activeSids.has(sid)) {
+          next.add(sid);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [remoteFeeds]);
+
+  const handleToggleWatch = (trackSid: string, watch?: boolean) => {
+    setWatchedTrackSids((prev) => {
+      const next = new Set(prev);
+      const shouldWatch = watch !== undefined ? watch : !next.has(trackSid);
+      if (shouldWatch) {
+        next.add(trackSid);
+      } else {
+        next.delete(trackSid);
+      }
+      return next;
+    });
+  };
+
+  const handleWatchAll = () => {
+    setWatchedTrackSids(new Set(remoteFeeds.map((f) => f.publication.trackSid)));
+  };
+
+  const handleStopWatchAll = () => {
+    setWatchedTrackSids(new Set());
+  };
+
   const handleJoin = async (e?: React.SyntheticEvent) => {
     if (e) {
       e.preventDefault();
@@ -112,6 +248,9 @@ export default function Home() {
 
     if (typeof window !== 'undefined') {
       localStorage.setItem('ecolive_display_name', name);
+      if (avatarUrl) {
+        localStorage.setItem('ecolive_avatar_url', avatarUrl);
+      }
     }
 
     // Gera um ID limpo derivado do nome do usuário + sufixo único
@@ -126,7 +265,7 @@ export default function Home() {
     setIsJoining(true);
     setJoinError(null);
     try {
-      await connect(channelId.trim() || 'call-discord-alpha', uniqueUserId, 'web', name);
+      await connect(channelId.trim() || 'call-discord-alpha', uniqueUserId, 'web', name, avatarUrl || undefined);
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : 'Falha ao conectar à sala.');
     } finally {
@@ -161,6 +300,7 @@ export default function Home() {
           channelId: room,
           userId: user,
           name: displayName.trim() || undefined,
+          avatar: avatarUrl || undefined,
         }),
       });
 
@@ -225,7 +365,7 @@ export default function Home() {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
               <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                v1.0.0
+                v1.1.0
               </span>
             </div>
             <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
@@ -234,13 +374,27 @@ export default function Home() {
 
         {isConnected && (
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <div className="hidden lg:flex items-center gap-2 text-xs bg-zinc-900/90 border border-zinc-800/90 px-3.5 py-1.5 rounded-xl shadow-inner">
+            <div className="hidden lg:flex items-center gap-2.5 text-xs bg-zinc-900/90 border border-zinc-800/90 px-3 py-1.5 rounded-xl shadow-inner">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-zinc-400">Sala:</span>
               <strong className="text-zinc-200 font-mono text-[11px]">{currentRoom}</strong>
               <span className="text-zinc-600">|</span>
-              <span className="text-zinc-400">Streamer:</span>
-              <strong className="text-zinc-200 text-[11px]">{displayName || currentIdentity}</strong>
+              <div className="flex items-center gap-1.5">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName || currentIdentity}
+                    className="w-5 h-5 rounded-full object-cover border border-zinc-700/80 shrink-0 shadow-sm"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                    {(displayName || currentIdentity || 'U').trim().charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-zinc-400">Streamer:</span>
+                <strong className="text-zinc-200 text-[11px]">{displayName || currentIdentity}</strong>
+              </div>
             </div>
 
             {/* BOTÃO ÚNICO DE TRANSMISSÃO */}
@@ -362,30 +516,92 @@ export default function Home() {
               )}
 
               <div className="space-y-4">
+                {/* Seção de participantes detectados do Discord */}
+                {discordParticipants.length > 0 && (
+                  <div className="p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 flex flex-col gap-2">
+                    <p className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
+                      <span>Perfis detectados no Discord:</span>
+                      <span className="text-[10px] text-indigo-400 font-mono">1 clique para entrar</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {discordParticipants.map((p) => {
+                        const pName = p.nickname || p.global_name || p.username;
+                        const pAvatar = getDiscordAvatarUrl(p.id, p.avatar);
+                        const isSelected = displayName === pName || detectedDiscordUser?.id === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleSelectDiscordParticipant(p)}
+                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${
+                              isSelected
+                                ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 shadow-sm shadow-indigo-500/20'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700'
+                            }`}
+                          >
+                            <img
+                              src={pAvatar}
+                              alt={pName}
+                              className="w-5 h-5 rounded-full object-cover border border-zinc-700 shrink-0"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                            <span className="truncate max-w-[120px]">{pName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                    Seu Nome de Exibição
-                  </label>
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => {
-                      setDisplayName(e.target.value);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('ecolive_display_name', e.target.value);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleJoin();
-                      }
-                    }}
-                    placeholder="ex: Kayque"
-                    autoFocus
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
-                    required
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      Seu Nome de Exibição
+                    </label>
+                    {avatarUrl && (
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Avatar Vinculado
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    {/* Preview do Avatar Selecionado */}
+                    <div className="h-11 w-11 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt="Avatar"
+                          className="h-full w-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span className="text-base text-zinc-500 font-bold">
+                          {displayName ? displayName.trim().charAt(0).toUpperCase() : '👤'}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => {
+                        setDisplayName(e.target.value);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('ecolive_display_name', e.target.value);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleJoin();
+                        }
+                      }}
+                      placeholder="ex: Kayque"
+                      autoFocus
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
+                      required
+                    />
+                  </div>
                 </div>
 
                 {/* Opções Avançadas (Ocultas por padrão) */}
@@ -395,27 +611,46 @@ export default function Home() {
                     onClick={() => setShowAdvanced(!showAdvanced)}
                     className="text-[11px] text-zinc-500 hover:text-zinc-400 transition flex items-center gap-1 cursor-pointer"
                   >
-                    <span>{showAdvanced ? '▾ Ocultar canal de voz' : '▸ Escolher canal de voz específico'}</span>
+                    <span>{showAdvanced ? '▾ Ocultar opções avançadas' : '▸ Opções avançadas (Canal / Avatar customizado)'}</span>
                   </button>
 
                   {showAdvanced && (
-                    <div className="mt-2.5">
-                      <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                        Canal da Sala
-                      </label>
-                      <input
-                        type="text"
-                        value={channelId}
-                        onChange={(e) => setChannelId(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleJoin();
-                          }
-                        }}
-                        placeholder="call-discord-alpha"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
-                      />
+                    <div className="mt-2.5 space-y-3">
+                      <div>
+                        <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                          Canal da Sala
+                        </label>
+                        <input
+                          type="text"
+                          value={channelId}
+                          onChange={(e) => setChannelId(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleJoin();
+                            }
+                          }}
+                          placeholder="call-discord-alpha"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                          URL do Avatar (Opcional)
+                        </label>
+                        <input
+                          type="url"
+                          value={avatarUrl}
+                          onChange={(e) => {
+                            setAvatarUrl(e.target.value);
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('ecolive_avatar_url', e.target.value);
+                            }
+                          }}
+                          placeholder="https://cdn.discordapp.com/avatars/..."
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -460,36 +695,101 @@ export default function Home() {
                 )}
               </div>
             ) : (
-              <div
-                className={`grid gap-4 w-full ${
-                  (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 1
-                    ? 'grid-cols-1 max-w-5xl mx-auto'
-                    : (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 2
-                    ? 'grid-cols-1 lg:grid-cols-2'
-                    : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
-                }`}
-              >
-                {/* 1. Preview da Transmissão Local (quando transmitindo pelo navegador) */}
-                {isScreenSharing && localScreenTrack && (
-                  <VideoPlayer
-                    localTrack={localScreenTrack}
-                    participantIdentity={currentIdentity}
-                    participantName={displayName ? `${displayName} (Sua Transmissão)` : 'Sua Transmissão'}
-                    isLocal={true}
-                  />
+              <div className="flex flex-col gap-4 w-full">
+                {/* Barra de Controle Coletivo de Banda (Exibida quando há 2 ou mais transmissões na sala) */}
+                {remoteFeeds.length >= 2 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 backdrop-blur-md shadow-lg">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-base">⚡</span>
+                      <span className="text-zinc-300 font-medium">
+                        {remoteFeeds.length} transmissões ativas:
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-bold font-mono text-[11px] border border-indigo-500/30">
+                        {remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length} assistindo
+                      </span>
+                      {remoteFeeds.length > remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length && (
+                        <span className="hidden md:inline text-[11px] text-emerald-400 font-medium">
+                          ({remoteFeeds.length - remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length} fechadas poupando internet)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleWatchAll}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-xs font-semibold text-zinc-100 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5 text-emerald-400 fill-current" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        <span>Assistir Todas</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStopWatchAll}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-800/60 hover:bg-rose-950/60 border border-zinc-700/40 hover:border-rose-800/50 active:scale-95 text-xs font-semibold text-zinc-400 hover:text-rose-200 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>Fechar Todas</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
 
-                {/* 2. Transmissões Remotas (outros streamers ou seu OBS Studio) */}
-                {remoteFeeds.map((feed) => (
-                  <VideoPlayer
-                    key={feed.publication.trackSid}
-                    publication={feed.publication}
-                    participant={feed.participant}
-                    participantIdentity={feed.participantIdentity}
-                    participantName={feed.participantName}
-                    isObs={feed.isObs}
-                  />
-                ))}
+                <div
+                  className={`grid gap-4 w-full ${
+                    (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 1
+                      ? 'grid-cols-1 max-w-5xl mx-auto'
+                      : (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 2
+                      ? 'grid-cols-1 lg:grid-cols-2'
+                      : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                  }`}
+                >
+                  {/* 1. Preview da Transmissão Local (quando transmitindo pelo navegador) */}
+                  {isScreenSharing && localScreenTrack && (
+                    <VideoPlayer
+                      localTrack={localScreenTrack}
+                      participantIdentity={currentIdentity}
+                      participantName={displayName ? `${displayName} (Sua Transmissão)` : 'Sua Transmissão'}
+                      isLocal={true}
+                      avatarUrl={avatarUrl}
+                    />
+                  )}
+
+                  {/* 2. Transmissões Remotas (outros streamers ou seu OBS Studio) */}
+                  {remoteFeeds.map((feed) => {
+                    // Procura avatar de participante correspondente no Discord SDK como fallback
+                    const matchedDiscordUser = discordParticipants.find((p) => {
+                      const cleanId = feed.participantIdentity.replace(/^(user_|obs_)/, '');
+                      return (
+                        p.id === cleanId ||
+                        p.username.toLowerCase() === (feed.participantName || '').toLowerCase() ||
+                        (p.global_name && p.global_name.toLowerCase() === (feed.participantName || '').toLowerCase()) ||
+                        (p.nickname && p.nickname.toLowerCase() === (feed.participantName || '').toLowerCase())
+                      );
+                    });
+                    const fallbackAvatar = matchedDiscordUser
+                      ? getDiscordAvatarUrl(matchedDiscordUser.id, matchedDiscordUser.avatar)
+                      : (feed.participantIdentity === currentIdentity ? avatarUrl : undefined);
+
+                    return (
+                      <VideoPlayer
+                        key={feed.publication.trackSid}
+                        publication={feed.publication}
+                        participant={feed.participant}
+                        participantIdentity={feed.participantIdentity}
+                        participantName={feed.participantName}
+                        isObs={feed.isObs}
+                        isWatching={watchedTrackSids.has(feed.publication.trackSid)}
+                        onToggleWatch={(watching) => handleToggleWatch(feed.publication.trackSid, watching)}
+                        avatarUrl={fallbackAvatar}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
