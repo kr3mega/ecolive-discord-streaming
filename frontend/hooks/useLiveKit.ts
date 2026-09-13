@@ -24,13 +24,68 @@ if (
     patchUrlMappings([
       {
         prefix: '/livekit',
-        target: 'gauge-gateway-asylum-margin.trycloudflare.com',
+        target: 'seasonal-specialized-butterfly-jake.trycloudflare.com',
       },
     ]);
   } catch (err) {
     console.warn('patchUrlMappings inicializado fora do contexto de iframe do Discord:', err);
   }
 }
+// 🔬 Simulador de Amigo Externo (sem atalhos locais de LAN)
+if (typeof window !== 'undefined') {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('simulate_external') === 'true' || urlParams.get('simular_externo') === 'true') {
+    console.warn('🔬 [Simulador] Modo Amigo Externo ATIVADO. Bloqueando candidatos locais de LAN para simular conexão externa via operadora.');
+
+    const rtcProto = window.RTCPeerConnection.prototype as any;
+    const originalSetRemoteDescription = rtcProto.setRemoteDescription;
+    rtcProto.setRemoteDescription = function (description: any, ...args: any[]) {
+      if (description && description.sdp) {
+        const filteredLines = description.sdp.split('\r\n').filter((line: string) => {
+          if (line.startsWith('a=candidate:')) {
+            if (
+              line.includes(' 127.0.0.1 ') ||
+              line.includes(' 192.168.') ||
+              line.includes(' 172.19.') ||
+              line.includes(' 172.30.') ||
+              line.includes(' 172.25.') ||
+              line.includes('.local ')
+            ) {
+              console.log('[Simulador Externo] Removido candidato de LAN do SDP:', line);
+              return false;
+            }
+          }
+          return true;
+        });
+        description = new RTCSessionDescription({
+          type: description.type,
+          sdp: filteredLines.join('\r\n'),
+        });
+      }
+      return originalSetRemoteDescription.apply(this, [description, ...args]);
+    };
+
+    const originalAddIceCandidate = rtcProto.addIceCandidate;
+    rtcProto.addIceCandidate = function (candidate?: any, ...args: any[]) {
+      if (candidate) {
+        const candStr = typeof candidate === 'string' ? candidate : (candidate.candidate || '');
+        if (
+          candStr.includes(' 127.0.0.1 ') ||
+          candStr.includes(' 192.168.') ||
+          candStr.includes(' 172.19.') ||
+          candStr.includes(' 172.30.') ||
+          candStr.includes(' 172.25.') ||
+          candStr.includes('.local ')
+        ) {
+          console.log('[Simulador Externo] Bloqueado candidato de LAN:', candStr);
+          return Promise.resolve();
+        }
+      }
+      return originalAddIceCandidate.apply(this, [candidate, ...args]);
+    };
+  }
+}
+
 
 export interface StreamFeed {
   participantIdentity: string;
@@ -81,8 +136,26 @@ export function useLiveKit() {
       setCurrentIdentity(identity);
       setCurrentRoom(roomName);
 
-      // Instanciação da sala: adaptiveStream false permite que o seletor de qualidade
-      // (1080p60) funcione mesmo se o elemento de vídeo na tela for menor que 1920x1080.
+      // Instanciação da sala com STUN/TURN de alta compatibilidade para furar barreiras de operadora
+      const defaultIceServers: RTCIceServer[] = [
+        {
+          urls: [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:openrelay.metered.ca:80',
+          ],
+        },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp',
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject',
+        },
+      ];
+
       const room = new Room({
         adaptiveStream: false,
         dynacast: true,
@@ -135,7 +208,11 @@ export function useLiveKit() {
         targetUrl = `${protocol}//${window.location.host}/livekit`;
       }
 
-      await room.connect(targetUrl, token);
+      await room.connect(targetUrl, token, {
+        rtcConfig: {
+          iceServers: defaultIceServers,
+        },
+      });
       roomRef.current = room;
       setIsConnected(true);
     } finally {

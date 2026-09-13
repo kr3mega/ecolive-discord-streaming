@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "*.trycloudflare.com",
     "taken-eligibility-uniprotkb-magical.trycloudflare.com",
     "*.discordsays.com",
+    "*.sslip.io",
   ],
   async rewrites() {
     return [

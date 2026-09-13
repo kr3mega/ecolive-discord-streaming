@@ -18,6 +18,45 @@ export default function Home() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [isSimulatingExternal, setIsSimulatingExternal] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showLogWindow, setShowLogWindow] = useState(false);
+  const [logsCopied, setLogsCopied] = useState(false);
+
+  // Captura logs do console para a janelinha de diagnóstico em tempo real
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const origErr = console.error;
+
+    const addLog = (level: string, ...args: unknown[]) => {
+      const text = args
+        .map((arg) => {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        })
+        .join(' ');
+      setDebugLogs((prev) => [...prev.slice(-150), `[${new Date().toLocaleTimeString()}] [${level}] ${text}`]);
+    };
+
+    console.log = (...args) => { origLog(...args); addLog('LOG', ...args); };
+    console.warn = (...args) => { origWarn(...args); addLog('WARN', ...args); };
+    console.error = (...args) => { origErr(...args); addLog('ERR', ...args); };
+
+    return () => {
+      console.log = origLog;
+      console.warn = origWarn;
+      console.error = origErr;
+    };
+  }, []);
 
   // Auto-detecta o ID do canal de voz do Discord e restaura preferências salvas
   useEffect(() => {
@@ -26,6 +65,10 @@ export default function Home() {
       const discordChannel = params.get('channel_id');
       if (discordChannel) {
         setChannelId(discordChannel);
+      }
+      const sim = params.get('simulate_external') === 'true' || params.get('simular_externo') === 'true';
+      if (sim) {
+        setIsSimulatingExternal(true);
       }
       const savedName = localStorage.getItem('ecolive_display_name');
       if (savedName) {
@@ -249,6 +292,68 @@ export default function Home() {
                   Transmissões ao vivo em tempo real com até 120 FPS.
                 </p>
               </div>
+
+              {isSimulatingExternal && (
+                <div className="mb-4 flex flex-col gap-2">
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2.5 shadow-lg">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-base shrink-0">🔬</span>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-amber-200 truncate">Simulador de Amigo Externo Ativo</p>
+                        <p className="text-[11px] text-amber-400/80 leading-relaxed truncate">
+                          Rotas locais bloqueadas. Testando via operadora.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowLogWindow(!showLogWindow)}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[11px] font-bold text-amber-200 transition shrink-0 cursor-pointer"
+                    >
+                      {showLogWindow ? 'Ocultar Logs' : 'Ver Logs'}
+                    </button>
+                  </div>
+
+                  {showLogWindow && (
+                    <div className="p-3 rounded-2xl bg-black/95 border border-zinc-800 text-zinc-300 shadow-2xl flex flex-col gap-2">
+                      <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-mono">
+                        <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Diagnóstico ({debugLogs.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(debugLogs.join('\n'));
+                            setLogsCopied(true);
+                            setTimeout(() => setLogsCopied(false), 2000);
+                          }}
+                          className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-200 transition cursor-pointer"
+                        >
+                          {logsCopied ? '✓ Copiado!' : 'Copiar Logs'}
+                        </button>
+                      </div>
+                      <div className="h-40 overflow-y-auto font-mono text-[10px] space-y-1 pr-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
+                        {debugLogs.length === 0 ? (
+                          <p className="text-zinc-600 italic">Nenhum log registrado ainda. Clique em Entrar para iniciar.</p>
+                        ) : (
+                          debugLogs.map((log, idx) => (
+                            <p
+                              key={idx}
+                              className={`leading-tight break-all ${
+                                log.includes('[ERR]') ? 'text-rose-400' :
+                                log.includes('[WARN]') ? 'text-amber-400' : 'text-zinc-400'
+                              }`}
+                            >
+                              {log}
+                            </p>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {joinError && (
                 <div className="mb-4 p-3 rounded-xl bg-rose-950/60 border border-rose-800/50 text-xs text-rose-300">

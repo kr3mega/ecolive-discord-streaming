@@ -10,7 +10,9 @@ services:
     container_name: ecolive-livekit
     image: livekit/livekit-server:latest
     restart: unless-stopped
-    command: --config /etc/livekit.yaml
+    command: --config /etc/livekit.yaml --node-ip ${PUBLIC_IP:-189.15.127.73}
+    environment:
+      - NODE_IP=${PUBLIC_IP:-189.15.127.73}
     depends_on:
       - redis
     ports:
