@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
-    const livekitInternalUrl = 'http://127.0.0.1:7880';
+    const livekitInternalUrl = process.env.LIVEKIT_URL || 'http://livekit:7880';
 
     if (!apiKey || !apiSecret) {
       return NextResponse.json(
@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
       bypassTranscoding: true, // ⚡ Modo Passthrough: zero transcodificação na CPU, preserva 120 FPS nativos da GPU
     });
 
-    // Se estiver em ambiente local, a URL é a porta 8085
-    const whipServerUrl = info.url || 'http://127.0.0.1:8085/w';
+    // URL pública do WHIP para o OBS Studio conectar com SSL
+    const whipServerUrl = process.env.WHIP_PUBLIC_URL || 'https://124-198-128-214.sslip.io/w';
 
     return NextResponse.json(
       {
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
-  const livekitInternalUrl = 'http://127.0.0.1:7880';
+  const livekitInternalUrl = process.env.LIVEKIT_URL || 'http://livekit:7880';
 
   if (!apiKey || !apiSecret) {
     return NextResponse.json(
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       bypassTranscoding: true,
     });
 
-    const whipServerUrl = info.url || 'http://127.0.0.1:8085/w';
+    const whipServerUrl = process.env.WHIP_PUBLIC_URL || 'https://124-198-128-214.sslip.io/w';
 
     return NextResponse.json(
       {
