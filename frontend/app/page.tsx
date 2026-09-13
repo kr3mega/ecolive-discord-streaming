@@ -85,6 +85,7 @@ export default function Home() {
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [discordParticipants, setDiscordParticipants] = useState<DiscordParticipant[]>([]);
   const [detectedDiscordUser, setDetectedDiscordUser] = useState<DiscordParticipant | null>(null);
+  const [discordSdkStatus, setDiscordSdkStatus] = useState<string>('Verificando conexão...');
 
   // Auto-detecta o ID do canal de voz do Discord, participantes conectados e restaura preferências salvas
   useEffect(() => {
@@ -108,23 +109,140 @@ export default function Home() {
       setAvatarUrl(savedAvatar);
     }
 
-    // Se estiver rodando dentro do iframe da Discord Activity (*.discordsays.com)
-    const isDiscordActivity =
-      window.location.hostname.includes('discordsays.com') ||
-      window.location.hostname.includes('discord.com');
+    const currentHost = window.location.hostname;
+    const currentSearch = window.location.search;
+    console.log('[Discord Init] Host:', currentHost, '| Query:', currentSearch);
 
-    if (isDiscordActivity) {
-      const clientId = window.location.hostname.split('.')[0];
-      if (clientId && clientId !== 'localhost' && !clientId.includes(':')) {
-        const initDiscord = async () => {
+    // Verifica se está dentro do ambiente de Activity do Discord
+    const hasFrameId = params.has('frame_id');
+    const isDiscordDomain = currentHost.includes('discordsays.com') || currentHost.includes('discord.com');
+    const isInsideIframe = typeof window !== 'undefined' && window.self !== window.top;
+
+    if (!isDiscordDomain && !hasFrameId && !isInsideIframe) {
+      const statusMsg = `Navegador externo (${currentHost})`;
+      setDiscordSdkStatus(statusMsg);
+      console.log('[Discord SDK] Executando fora do iframe oficial da Atividade do Discord:', currentHost);
+      return;
+    }
+
+    let clientId = currentHost.split('.')[0];
+    if (!clientId || clientId === 'discord' || clientId.includes('sslip') || clientId.includes('trycloudflare') || clientId === 'localhost') {
+      const candidate = params.get('client_id') || params.get('app_id') || params.get('application_id');
+      if (candidate) {
+        clientId = candidate;
+      }
+    }
+
+    if (!params.get('frame_id')) {
+      const statusMsg = 'Aguardando Atividade no Discord (frame_id ausente)';
+      setDiscordSdkStatus(statusMsg);
+      console.warn('[Discord SDK] Parâmetro frame_id ausente na URL. Aberto como link direto? Host:', currentHost);
+      return;
+    }
+
+    const initDiscord = async () => {
+      try {
+        setDiscordSdkStatus(`Iniciando SDK (${clientId})...`);
+        console.log(`[Discord SDK] Instanciando DiscordSDK com client_id: ${clientId}`);
+        const discordSdk = new DiscordSDK(clientId);
+
+        setDiscordSdkStatus('Aguardando handshake do Discord...');
+        await Promise.race([
+          discordSdk.ready(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Handshake com o Discord demorou mais de 4s')), 4000)
+          ),
+        ]);
+
+        let authenticatedUser: DiscordParticipant | null = null;
+
+        // 1. Tenta autenticar a sessão oficial do Discord Activity
+        try {
+          setDiscordSdkStatus('Autenticando sessão do usuário...');
+          let code: string | null = null;
           try {
-            const discordSdk = new DiscordSDK(clientId);
-            await discordSdk.ready();
-            const result = await discordSdk.commands.getInstanceConnectedParticipants();
-            if (result && Array.isArray(result.participants) && result.participants.length > 0) {
-              setDiscordParticipants(result.participants);
+            const authRes = await discordSdk.commands.authorize({
+              client_id: clientId,
+              response_type: 'code',
+              state: '',
+              prompt: 'none',
+              scope: ['identify', 'guilds'],
+            });
+            code = authRes.code;
+          } catch (silentErr: unknown) {
+            const silentStr = typeof silentErr === 'object' ? JSON.stringify(silentErr) : String(silentErr);
+            console.log('[Discord SDK] prompt: none falhou:', silentStr);
+            if (silentStr.includes('redirect_uri')) {
+              throw silentErr;
+            }
+            const authRes = await discordSdk.commands.authorize({
+              client_id: clientId,
+              response_type: 'code',
+              state: '',
+              scope: ['identify', 'guilds'],
+            });
+            code = authRes.code;
+          }
 
-              // Tenta encontrar o participante correspondente ao usuário
+          if (code) {
+            const tokenRes = await fetch('/api/discord/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code }),
+            });
+
+            if (tokenRes.ok) {
+              const tokenData = await tokenRes.json();
+              if (tokenData.access_token) {
+                const authResult = await discordSdk.commands.authenticate({
+                  access_token: tokenData.access_token,
+                });
+                if (authResult?.user) {
+                  authenticatedUser = {
+                    id: authResult.user.id,
+                    username: authResult.user.username,
+                    discriminator: authResult.user.discriminator,
+                    avatar: authResult.user.avatar,
+                    global_name: authResult.user.global_name,
+                  };
+                  console.log('[Discord SDK] Usuário autenticado com sucesso:', authenticatedUser);
+                  const chosenName = authenticatedUser.global_name || authenticatedUser.username;
+                  setDisplayName(chosenName);
+                  localStorage.setItem('ecolive_display_name', chosenName);
+                  const avatar = getDiscordAvatarUrl(authenticatedUser.id, authenticatedUser.avatar);
+                  setAvatarUrl(avatar);
+                  localStorage.setItem('ecolive_avatar_url', avatar);
+                  setDetectedDiscordUser(authenticatedUser);
+                  setDiscordSdkStatus(`Conectado como ${chosenName}`);
+                }
+              }
+            } else {
+              const errData = await tokenRes.json().catch(() => ({}));
+              console.warn('[Discord Auth Backend]:', errData.error || 'Erro na troca do token');
+              setDiscordSdkStatus('Erro ao validar token no backend');
+            }
+          }
+        } catch (authErr: unknown) {
+          const errMsg = typeof authErr === 'object' ? JSON.stringify(authErr) : String(authErr);
+          console.warn('[Discord SDK Authorize]:', errMsg);
+          if (errMsg.includes('redirect_uri')) {
+            setDiscordSdkStatus('OAuth2: Adicione https://127.0.0.1 em OAuth2 > Redirects no Developer Portal');
+          } else {
+            setDiscordSdkStatus('Falha na autorização do Discord');
+          }
+        }
+
+        // 2. Busca participantes conectados na chamada de voz
+        try {
+          setDiscordSdkStatus('Buscando participantes do canal...');
+          const result = await discordSdk.commands.getInstanceConnectedParticipants();
+          console.log('[Discord SDK] Participantes conectados recebidos:', result);
+
+          if (result && Array.isArray(result.participants) && result.participants.length > 0) {
+            setDiscordParticipants(result.participants);
+            setDiscordSdkStatus(`${result.participants.length} perfil(is) detectado(s)`);
+
+            if (!authenticatedUser) {
               let matched = result.participants.find(
                 (p) =>
                   savedName && (
@@ -134,7 +252,6 @@ export default function Home() {
                   )
               );
 
-              // Se tiver só 1 participante na chamada, é automaticamente o usuário conectado
               if (!matched && result.participants.length === 1) {
                 matched = result.participants[0];
               }
@@ -151,13 +268,23 @@ export default function Home() {
                 localStorage.setItem('ecolive_avatar_url', avatar);
               }
             }
-          } catch (err) {
-            console.warn('[Discord SDK] Detecção de participantes indisponível ou fora do iframe:', err);
           }
-        };
-        initDiscord();
+        } catch (partsErr) {
+          console.warn('[Discord SDK Participants]:', typeof partsErr === 'object' ? JSON.stringify(partsErr) : partsErr);
+        }
+      } catch (err) {
+        let errMsg = '';
+        try {
+          errMsg = err instanceof Error ? err.message : JSON.stringify(err);
+        } catch {
+          errMsg = String(err);
+        }
+        console.warn('[Discord SDK Falhou]:', errMsg);
+        setDiscordSdkStatus(`Discord SDK: ${errMsg}`);
       }
-    }
+    };
+
+    initDiscord();
   }, []);
 
   const handleSelectDiscordParticipant = (participant: DiscordParticipant) => {
@@ -364,8 +491,8 @@ export default function Home() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
-              <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                v1.1.0
+              <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 shrink-0">
+                v1.2.0
               </span>
             </div>
             <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
@@ -437,75 +564,88 @@ export default function Home() {
           /* TELA INICIAL SIMPLIFICADA: Pede apenas o Nome de Exibição */
           <div className="max-w-sm w-full mx-auto my-auto flex flex-col gap-4">
             <div className="bg-zinc-900/90 border border-zinc-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
-              <div className="text-center mb-6">
-                <div className="inline-flex h-12 w-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 items-center justify-center font-black text-xl text-white shadow-xl shadow-emerald-500/20 mb-3">
-                  🍃
+              <div className="text-center mb-5">
+                <div className="relative inline-flex mb-3">
+                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-emerald-500/25 ring-1 ring-white/20">
+                    🍃
+                  </div>
+                  <span className="absolute -bottom-1 -right-2 px-1.5 py-0.5 rounded-full bg-zinc-950/90 border border-emerald-500/50 text-[9px] font-black text-emerald-400 tracking-wider shadow-lg">
+                    v1.2.0
+                  </span>
                 </div>
                 <h2 className="text-lg font-bold text-zinc-100">Bem-vindo ao EcoLive</h2>
                 <p className="text-xs text-zinc-400 mt-1">
                   Transmissões ao vivo em tempo real com até 120 FPS.
                 </p>
+
+                {/* Status da Conexão com Discord Activity */}
+                <div className="mt-2.5 flex items-center justify-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    discordParticipants.length > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                  }`} />
+                  <span className="text-[11px] text-zinc-400 font-medium truncate max-w-[220px]">
+                    {discordSdkStatus}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowLogWindow(!showLogWindow)}
+                    className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer ml-1"
+                  >
+                    {showLogWindow ? 'Ocultar' : 'Ver Logs'}
+                  </button>
+                </div>
               </div>
 
-              {isSimulatingExternal && (
-                <div className="mb-4 flex flex-col gap-2">
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2.5 shadow-lg">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base shrink-0">🔬</span>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-amber-200 truncate">Simulador de Amigo Externo Ativo</p>
-                        <p className="text-[11px] text-amber-400/80 leading-relaxed truncate">
-                          Rotas locais bloqueadas. Testando via operadora.
-                        </p>
-                      </div>
-                    </div>
+              {showLogWindow && (
+                <div className="mb-4 p-3 rounded-2xl bg-black/95 border border-zinc-800 text-zinc-300 shadow-2xl flex flex-col gap-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-mono">
+                    <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Diagnóstico ({debugLogs.length})
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setShowLogWindow(!showLogWindow)}
-                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[11px] font-bold text-amber-200 transition shrink-0 cursor-pointer"
+                      onClick={() => {
+                        navigator.clipboard.writeText(debugLogs.join('\n'));
+                        setLogsCopied(true);
+                        setTimeout(() => setLogsCopied(false), 2000);
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-200 transition cursor-pointer"
                     >
-                      {showLogWindow ? 'Ocultar Logs' : 'Ver Logs'}
+                      {logsCopied ? '✓ Copiado!' : 'Copiar Logs'}
                     </button>
                   </div>
-
-                  {showLogWindow && (
-                    <div className="p-3 rounded-2xl bg-black/95 border border-zinc-800 text-zinc-300 shadow-2xl flex flex-col gap-2">
-                      <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-mono">
-                        <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                          Diagnóstico ({debugLogs.length})
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(debugLogs.join('\n'));
-                            setLogsCopied(true);
-                            setTimeout(() => setLogsCopied(false), 2000);
-                          }}
-                          className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-200 transition cursor-pointer"
+                  <div className="h-40 overflow-y-auto font-mono text-[10px] space-y-1 pr-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
+                    {debugLogs.length === 0 ? (
+                      <p className="text-zinc-600 italic">Nenhum log registrado ainda.</p>
+                    ) : (
+                      debugLogs.map((log, idx) => (
+                        <p
+                          key={idx}
+                          className={`leading-tight break-all ${
+                            log.includes('[ERR]') ? 'text-rose-400' :
+                            log.includes('[WARN]') ? 'text-amber-400' : 'text-zinc-400'
+                          }`}
                         >
-                          {logsCopied ? '✓ Copiado!' : 'Copiar Logs'}
-                        </button>
-                      </div>
-                      <div className="h-40 overflow-y-auto font-mono text-[10px] space-y-1 pr-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
-                        {debugLogs.length === 0 ? (
-                          <p className="text-zinc-600 italic">Nenhum log registrado ainda. Clique em Entrar para iniciar.</p>
-                        ) : (
-                          debugLogs.map((log, idx) => (
-                            <p
-                              key={idx}
-                              className={`leading-tight break-all ${
-                                log.includes('[ERR]') ? 'text-rose-400' :
-                                log.includes('[WARN]') ? 'text-amber-400' : 'text-zinc-400'
-                              }`}
-                            >
-                              {log}
-                            </p>
-                          ))
-                        )}
-                      </div>
+                          {log}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isSimulatingExternal && !showLogWindow && (
+                <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2.5 shadow-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">🔬</span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-amber-200 truncate">Simulador de Amigo Externo Ativo</p>
+                      <p className="text-[11px] text-amber-400/80 leading-relaxed truncate">
+                        Rotas locais bloqueadas. Testando via operadora.
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -567,7 +707,9 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2.5">
                     {/* Preview do Avatar Selecionado */}
-                    <div className="h-11 w-11 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                    <div className={`h-11 w-11 rounded-xl bg-zinc-950 border flex items-center justify-center shrink-0 overflow-hidden shadow-inner transition-all ${
+                      avatarUrl ? 'border-emerald-500/50 shadow-emerald-500/10 ring-2 ring-emerald-500/20' : 'border-zinc-800'
+                    }`}>
                       {avatarUrl ? (
                         <img
                           src={avatarUrl}
