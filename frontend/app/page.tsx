@@ -82,10 +82,23 @@ export default function Home() {
   }, []);
 
   // Estados de Perfil e Avatar do Discord
+  const [channelName, setChannelName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string>('');
-  const [discordParticipants, setDiscordParticipants] = useState<DiscordParticipant[]>([]);
   const [detectedDiscordUser, setDetectedDiscordUser] = useState<DiscordParticipant | null>(null);
   const [discordSdkStatus, setDiscordSdkStatus] = useState<string>('Verificando conexão...');
+
+  // Monitoramento discreto de banda da VPS
+  const [serverBandwidth, setServerBandwidth] = useState<{
+    currentMbps: number;
+    maxMbps: number;
+    percent: number;
+    rxMbps: number;
+    txMbps: number;
+    totalUsedGB: number;
+    totalQuotaTB: number;
+    quotaPercent: number;
+  } | null>(null);
+
 
   // Auto-detecta o ID do canal de voz do Discord, participantes conectados e restaura preferências salvas
   useEffect(() => {
@@ -107,6 +120,10 @@ export default function Home() {
     const savedAvatar = localStorage.getItem('ecolive_avatar_url');
     if (savedAvatar) {
       setAvatarUrl(savedAvatar);
+    }
+    const savedChannelName = localStorage.getItem('ecolive_channel_name');
+    if (savedChannelName) {
+      setChannelName(savedChannelName);
     }
 
     const currentHost = window.location.hostname;
@@ -215,6 +232,21 @@ export default function Home() {
                   setDetectedDiscordUser(authenticatedUser);
                   setDiscordSdkStatus(`Conectado como ${chosenName}`);
                 }
+
+                // Obtém o nome amigável do canal de voz no Discord (ex: "Estádio")
+                try {
+                  const targetChannelId = discordSdk.channelId || params.get('channel_id');
+                  if (targetChannelId) {
+                    const channel = await discordSdk.commands.getChannel({ channel_id: targetChannelId });
+                    if (channel?.name) {
+                      console.log('[Discord SDK] Canal detectado:', channel.name);
+                      setChannelName(channel.name);
+                      localStorage.setItem('ecolive_channel_name', channel.name);
+                    }
+                  }
+                } catch (chErr) {
+                  console.warn('[Discord SDK] Falha ao obter nome do canal:', chErr);
+                }
               }
             } else {
               const errData = await tokenRes.json().catch(() => ({}));
@@ -232,45 +264,10 @@ export default function Home() {
           }
         }
 
-        // 2. Busca participantes conectados na chamada de voz
-        try {
-          setDiscordSdkStatus('Buscando participantes do canal...');
-          const result = await discordSdk.commands.getInstanceConnectedParticipants();
-          console.log('[Discord SDK] Participantes conectados recebidos:', result);
-
-          if (result && Array.isArray(result.participants) && result.participants.length > 0) {
-            setDiscordParticipants(result.participants);
-            setDiscordSdkStatus(`${result.participants.length} perfil(is) detectado(s)`);
-
-            if (!authenticatedUser) {
-              let matched = result.participants.find(
-                (p) =>
-                  savedName && (
-                    p.username.toLowerCase() === savedName.toLowerCase() ||
-                    (p.global_name && p.global_name.toLowerCase() === savedName.toLowerCase()) ||
-                    (p.nickname && p.nickname.toLowerCase() === savedName.toLowerCase())
-                  )
-              );
-
-              if (!matched && result.participants.length === 1) {
-                matched = result.participants[0];
-              }
-
-              if (matched) {
-                setDetectedDiscordUser(matched);
-                const chosenName = matched.nickname || matched.global_name || matched.username;
-                if (!savedName) {
-                  setDisplayName(chosenName);
-                  localStorage.setItem('ecolive_display_name', chosenName);
-                }
-                const avatar = getDiscordAvatarUrl(matched.id, matched.avatar);
-                setAvatarUrl(avatar);
-                localStorage.setItem('ecolive_avatar_url', avatar);
-              }
-            }
-          }
-        } catch (partsErr) {
-          console.warn('[Discord SDK Participants]:', typeof partsErr === 'object' ? JSON.stringify(partsErr) : partsErr);
+        if (authenticatedUser) {
+          setDiscordSdkStatus('Identidade Oficial Vinculada');
+        } else {
+          setDiscordSdkStatus('Modo Visitante (Discord não autenticado)');
         }
       } catch (err) {
         let errMsg = '';
@@ -287,21 +284,8 @@ export default function Home() {
     initDiscord();
   }, []);
 
-  const handleSelectDiscordParticipant = (participant: DiscordParticipant) => {
-    setDetectedDiscordUser(participant);
-    const chosenName = participant.nickname || participant.global_name || participant.username;
-    setDisplayName(chosenName);
-    const avatar = getDiscordAvatarUrl(participant.id, participant.avatar);
-    setAvatarUrl(avatar);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ecolive_display_name', chosenName);
-      localStorage.setItem('ecolive_avatar_url', avatar);
-    }
-  };
-
-  // Estados do Modal de Transmissão (Web vs OBS)
+  // Estados do Modal de Transmissão via OBS
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
-  const [streamModalView, setStreamModalView] = useState<'choose' | 'obs_details'>('choose');
   const [isGeneratingWhip, setIsGeneratingWhip] = useState(false);
   const [whipCredentials, setWhipCredentials] = useState<WhipCredentials | null>(null);
   const [whipError, setWhipError] = useState<string | null>(null);
@@ -310,16 +294,61 @@ export default function Home() {
 
   const {
     isConnected,
-    isScreenSharing,
     remoteFeeds,
     currentIdentity,
     currentRoom,
-    localScreenTrack,
     connect,
     disconnect,
-    toggleScreenShare,
     setQuality,
   } = useLiveKit();
+
+  // Tem alguma live ativa transmitindo na sala?
+  const hasActiveStreams = isConnected && remoteFeeds.length > 0;
+
+  // Monitoramento de banda sob demanda:
+  // - Sem live ativa: Zera pooling para poupar rede e define taxa em 0.0 Mbps
+  // - Com live ativa: Inicia pooling a cada 3s para acompanhar a taxa em tempo real
+  useEffect(() => {
+    if (!isConnected) return;
+
+    let isMounted = true;
+    const fetchBandwidth = async () => {
+      try {
+        const res = await fetch('/api/server/bandwidth');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            if (!hasActiveStreams) {
+              data.currentMbps = 0;
+              data.rxMbps = 0;
+              data.txMbps = 0;
+              data.percent = 0;
+            }
+            setServerBandwidth(data);
+          }
+        }
+      } catch {
+        // Silencioso em caso de falha de conexão
+      }
+    };
+
+    // Busca inicial de cota ao entrar na sala
+    fetchBandwidth();
+
+    if (hasActiveStreams) {
+      const interval = setInterval(fetchBandwidth, 3000);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    } else {
+      setServerBandwidth((prev) => (prev ? { ...prev, currentMbps: 0, rxMbps: 0, txMbps: 0, percent: 0 } : null));
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isConnected, hasActiveStreams]);
 
   // Transmissões remotas assistidas sob demanda (estilo Discord)
   const [watchedTrackSids, setWatchedTrackSids] = useState<Set<string>>(new Set());
@@ -400,21 +429,8 @@ export default function Home() {
     }
   };
 
-  const handleOpenStreamModal = () => {
-    setStreamModalView('choose');
-    setWhipError(null);
+  const handleOpenObsModal = async () => {
     setIsStreamModalOpen(true);
-  };
-
-  const handleChooseWeb = async () => {
-    setIsStreamModalOpen(false);
-    if (!isScreenSharing) {
-      await toggleScreenShare();
-    }
-  };
-
-  const handleChooseObs = async () => {
-    setStreamModalView('obs_details');
     setIsGeneratingWhip(true);
     setWhipError(null);
     try {
@@ -444,6 +460,8 @@ export default function Home() {
       setIsGeneratingWhip(false);
     }
   };
+
+  const handleOpenStreamModal = handleOpenObsModal;
 
   const copyToClipboard = async (text: string, fieldName: string) => {
     let success = false;
@@ -492,19 +510,66 @@ export default function Home() {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
               <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 shrink-0">
-                v1.2.0
+                v1.3.0
               </span>
             </div>
-            <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa & 120 FPS</p>
+            <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa</p>
           </div>
         </div>
+
+        {/* Monitor Discreto de Rede do Servidor (Visível apenas dentro da sala) */}
+        {isConnected && serverBandwidth && (
+          <div
+            className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono shadow-inner select-none shrink-0"
+            title={`Tráfego Geral do Servidor (LiveKit + Ingress + Web)\nDownload: ${serverBandwidth.rxMbps} Mbps | Upload: ${serverBandwidth.txMbps} Mbps\nCota do Servidor: ${serverBandwidth.totalUsedGB} GB usados de ${serverBandwidth.totalQuotaTB} TB (${serverBandwidth.quotaPercent}%)`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  hasActiveStreams && serverBandwidth.currentMbps > 0
+                    ? serverBandwidth.percent > 85
+                      ? 'bg-rose-500 animate-ping'
+                      : serverBandwidth.percent > 65
+                      ? 'bg-amber-400 animate-pulse'
+                      : 'bg-emerald-400 animate-pulse'
+                    : 'bg-emerald-500/50'
+                }`}
+              />
+              <span className="text-zinc-500 text-[10px] uppercase font-sans font-semibold">Rede:</span>
+              <span className="text-zinc-200 font-semibold">
+                {hasActiveStreams ? serverBandwidth.currentMbps.toFixed(1) : '0.0'} Mbps
+              </span>
+              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-400">
+                {serverBandwidth.maxMbps >= 1000
+                  ? `${(serverBandwidth.maxMbps / 1000).toFixed(0)} Gbps`
+                  : `${serverBandwidth.maxMbps} Mbps`}
+              </span>
+            </div>
+
+            <span className="text-zinc-700 font-light">|</span>
+
+            {/* Cota Total de 2TB */}
+            <div className="flex items-center gap-1 text-[10px]">
+              <span className="text-zinc-500 font-sans font-semibold">Total:</span>
+              <span className="text-emerald-400 font-semibold">{serverBandwidth.quotaPercent}% usado</span>
+              <span className="text-zinc-500">de</span>
+              <span className="text-zinc-300 font-semibold">{serverBandwidth.totalQuotaTB} TB</span>
+            </div>
+          </div>
+        )}
 
         {isConnected && (
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <div className="hidden lg:flex items-center gap-2.5 text-xs bg-zinc-900/90 border border-zinc-800/90 px-3 py-1.5 rounded-xl shadow-inner">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-zinc-400">Sala:</span>
-              <strong className="text-zinc-200 font-mono text-[11px]">{currentRoom}</strong>
+              <strong
+                className="text-zinc-200 font-semibold text-[11px] truncate max-w-[140px]"
+                title={channelName ? `${channelName} (${currentRoom})` : currentRoom}
+              >
+                {channelName || currentRoom}
+              </strong>
               <span className="text-zinc-600">|</span>
               <div className="flex items-center gap-1.5">
                 {avatarUrl ? (
@@ -519,33 +584,23 @@ export default function Home() {
                     {(displayName || currentIdentity || 'U').trim().charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-zinc-400">Streamer:</span>
+                <span className="text-zinc-400">Conectado como:</span>
                 <strong className="text-zinc-200 text-[11px]">{displayName || currentIdentity}</strong>
               </div>
             </div>
 
-            {/* BOTÃO ÚNICO DE TRANSMISSÃO */}
-            {isScreenSharing ? (
-              <button
-                type="button"
-                onClick={toggleScreenShare}
-                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-rose-900/30 transition-all cursor-pointer"
-              >
-                <span className="h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
-                <span className="hidden sm:inline">Parar Transmissão</span>
-                <span className="sm:hidden">Parar</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleOpenStreamModal}
-                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-indigo-900/30 transition-all cursor-pointer"
-              >
-                <span>🚀</span>
-                <span className="hidden sm:inline">Iniciar Transmissão</span>
-                <span className="sm:hidden">Transmitir</span>
-              </button>
-            )}
+            {/* BOTÃO DE TRANSMISSÃO OBS */}
+            <button
+              type="button"
+              onClick={handleOpenObsModal}
+              className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-indigo-900/30 transition-all cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
+                <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
+              </svg>
+              <span className="hidden sm:inline">Transmitir via OBS</span>
+              <span className="sm:hidden">OBS</span>
+            </button>
 
             <button
               type="button"
@@ -565,89 +620,17 @@ export default function Home() {
           <div className="max-w-sm w-full mx-auto my-auto flex flex-col gap-4">
             <div className="bg-zinc-900/90 border border-zinc-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
               <div className="text-center mb-5">
-                <div className="relative inline-flex mb-3">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-emerald-500/25 ring-1 ring-white/20">
+                <div className="inline-flex mb-3">
+                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-emerald-500/20 shrink-0">
                     🍃
                   </div>
-                  <span className="absolute -bottom-1 -right-2 px-1.5 py-0.5 rounded-full bg-zinc-950/90 border border-emerald-500/50 text-[9px] font-black text-emerald-400 tracking-wider shadow-lg">
-                    v1.2.0
-                  </span>
                 </div>
                 <h2 className="text-lg font-bold text-zinc-100">Bem-vindo ao EcoLive</h2>
                 <p className="text-xs text-zinc-400 mt-1">
-                  Transmissões ao vivo em tempo real com até 120 FPS.
+                  Transmissões em tempo real via OBS.
                 </p>
 
-                {/* Status da Conexão com Discord Activity */}
-                <div className="mt-2.5 flex items-center justify-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    discordParticipants.length > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                  }`} />
-                  <span className="text-[11px] text-zinc-400 font-medium truncate max-w-[220px]">
-                    {discordSdkStatus}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowLogWindow(!showLogWindow)}
-                    className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer ml-1"
-                  >
-                    {showLogWindow ? 'Ocultar' : 'Ver Logs'}
-                  </button>
-                </div>
               </div>
-
-              {showLogWindow && (
-                <div className="mb-4 p-3 rounded-2xl bg-black/95 border border-zinc-800 text-zinc-300 shadow-2xl flex flex-col gap-2">
-                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs font-mono">
-                    <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Diagnóstico ({debugLogs.length})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(debugLogs.join('\n'));
-                        setLogsCopied(true);
-                        setTimeout(() => setLogsCopied(false), 2000);
-                      }}
-                      className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-200 transition cursor-pointer"
-                    >
-                      {logsCopied ? '✓ Copiado!' : 'Copiar Logs'}
-                    </button>
-                  </div>
-                  <div className="h-40 overflow-y-auto font-mono text-[10px] space-y-1 pr-1 select-text scrollbar-thin scrollbar-thumb-zinc-800">
-                    {debugLogs.length === 0 ? (
-                      <p className="text-zinc-600 italic">Nenhum log registrado ainda.</p>
-                    ) : (
-                      debugLogs.map((log, idx) => (
-                        <p
-                          key={idx}
-                          className={`leading-tight break-all ${
-                            log.includes('[ERR]') ? 'text-rose-400' :
-                            log.includes('[WARN]') ? 'text-amber-400' : 'text-zinc-400'
-                          }`}
-                        >
-                          {log}
-                        </p>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {isSimulatingExternal && !showLogWindow && (
-                <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-2.5 shadow-lg">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base shrink-0">🔬</span>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-amber-200 truncate">Simulador de Amigo Externo Ativo</p>
-                      <p className="text-[11px] text-amber-400/80 leading-relaxed truncate">
-                        Rotas locais bloqueadas. Testando via operadora.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {joinError && (
                 <div className="mb-4 p-3 rounded-xl bg-rose-950/60 border border-rose-800/50 text-xs text-rose-300">
@@ -656,54 +639,11 @@ export default function Home() {
               )}
 
               <div className="space-y-4">
-                {/* Seção de participantes detectados do Discord */}
-                {discordParticipants.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 flex flex-col gap-2">
-                    <p className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
-                      <span>Perfis detectados no Discord:</span>
-                      <span className="text-[10px] text-indigo-400 font-mono">1 clique para entrar</span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {discordParticipants.map((p) => {
-                        const pName = p.nickname || p.global_name || p.username;
-                        const pAvatar = getDiscordAvatarUrl(p.id, p.avatar);
-                        const isSelected = displayName === pName || detectedDiscordUser?.id === p.id;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => handleSelectDiscordParticipant(p)}
-                            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${
-                              isSelected
-                                ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 shadow-sm shadow-indigo-500/20'
-                                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700'
-                            }`}
-                          >
-                            <img
-                              src={pAvatar}
-                              alt={pName}
-                              className="w-5 h-5 rounded-full object-cover border border-zinc-700 shrink-0"
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
-                            <span className="truncate max-w-[120px]">{pName}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className="block text-xs font-semibold text-zinc-300">
                       Seu Nome de Exibição
                     </label>
-                    {avatarUrl && (
-                      <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Avatar Vinculado
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-2.5">
                     {/* Preview do Avatar Selecionado */}
@@ -746,57 +686,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Opções Avançadas (Ocultas por padrão) */}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="text-[11px] text-zinc-500 hover:text-zinc-400 transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>{showAdvanced ? '▾ Ocultar opções avançadas' : '▸ Opções avançadas (Canal / Avatar customizado)'}</span>
-                  </button>
-
-                  {showAdvanced && (
-                    <div className="mt-2.5 space-y-3">
-                      <div>
-                        <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                          Canal da Sala
-                        </label>
-                        <input
-                          type="text"
-                          value={channelId}
-                          onChange={(e) => setChannelId(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleJoin();
-                            }
-                          }}
-                          placeholder="call-discord-alpha"
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-                          URL do Avatar (Opcional)
-                        </label>
-                        <input
-                          type="url"
-                          value={avatarUrl}
-                          onChange={(e) => {
-                            setAvatarUrl(e.target.value);
-                            if (typeof window !== 'undefined') {
-                              localStorage.setItem('ecolive_avatar_url', e.target.value);
-                            }
-                          }}
-                          placeholder="https://cdn.discordapp.com/avatars/..."
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 <button
                   type="button"
                   onClick={(e) => {
@@ -815,26 +704,29 @@ export default function Home() {
           /* DENTRO DA SALA: Grid de Vídeos ou Estado Aguardando */
           <div className="flex flex-col gap-6 flex-1">
             {/* Grid Mosaico Dinâmico */}
-            {(!isScreenSharing || !localScreenTrack) && remoteFeeds.length === 0 ? (
+            {remoteFeeds.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-12 border border-dashed border-zinc-800/80 rounded-3xl text-center bg-zinc-900/20 my-auto">
-                <div className="h-16 w-16 rounded-2xl bg-zinc-800/60 border border-zinc-700/40 flex items-center justify-center text-3xl mb-4 shadow-inner">
-                  📺
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-b from-zinc-800/80 to-zinc-900/90 border border-zinc-700/50 flex items-center justify-center mb-4 shadow-xl shadow-black/40 ring-1 ring-white/5">
+                  <svg className="w-7 h-7 text-indigo-400 fill-current drop-shadow-sm" viewBox="0 0 24 24">
+                    <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
+                  </svg>
                 </div>
                 <h3 className="text-base font-bold text-zinc-100">A sala está pronta</h3>
                 <p className="text-xs text-zinc-400 max-w-sm mt-1.5 mb-6 leading-relaxed">
-                  Você está conectado como <strong className="text-zinc-200 font-semibold">{displayName || currentIdentity}</strong>. Nenhuma transmissão ativa no momento.
+                  Nenhuma transmissão ativa no momento.
                 </p>
 
-                {/* BOTÃO ÚNICO DE TRANSMISSÃO NO CENTRO */}
-                {!isScreenSharing && (
-                  <button
-                    type="button"
-                    onClick={handleOpenStreamModal}
-                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <span>🚀 Iniciar Transmissão</span>
-                  </button>
-                )}
+                {/* BOTÃO DE TRANSMISSÃO OBS NO CENTRO */}
+                <button
+                  type="button"
+                  onClick={handleOpenObsModal}
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2.5 cursor-pointer"
+                >
+                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                    <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
+                  </svg>
+                  <span>Transmitir via OBS</span>
+                </button>
               </div>
             ) : (
               <div className="flex flex-col gap-4 w-full">
@@ -883,39 +775,25 @@ export default function Home() {
 
                 <div
                   className={`grid gap-4 w-full ${
-                    (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 1
+                    remoteFeeds.length === 1
                       ? 'grid-cols-1 max-w-5xl mx-auto'
-                      : (isScreenSharing && localScreenTrack ? 1 : 0) + remoteFeeds.length === 2
+                      : remoteFeeds.length === 2
                       ? 'grid-cols-1 lg:grid-cols-2'
                       : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
                   }`}
                 >
-                  {/* 1. Preview da Transmissão Local (quando transmitindo pelo navegador) */}
-                  {isScreenSharing && localScreenTrack && (
-                    <VideoPlayer
-                      localTrack={localScreenTrack}
-                      participantIdentity={currentIdentity}
-                      participantName={displayName ? `${displayName} (Sua Transmissão)` : 'Sua Transmissão'}
-                      isLocal={true}
-                      avatarUrl={avatarUrl}
-                    />
-                  )}
-
-                  {/* 2. Transmissões Remotas (outros streamers ou seu OBS Studio) */}
+                  {/* Transmissões dos Participantes via OBS Studio */}
                   {remoteFeeds.map((feed) => {
-                    // Procura avatar de participante correspondente no Discord SDK como fallback
-                    const matchedDiscordUser = discordParticipants.find((p) => {
-                      const cleanId = feed.participantIdentity.replace(/^(user_|obs_)/, '');
-                      return (
-                        p.id === cleanId ||
-                        p.username.toLowerCase() === (feed.participantName || '').toLowerCase() ||
-                        (p.global_name && p.global_name.toLowerCase() === (feed.participantName || '').toLowerCase()) ||
-                        (p.nickname && p.nickname.toLowerCase() === (feed.participantName || '').toLowerCase())
-                      );
-                    });
-                    const fallbackAvatar = matchedDiscordUser
-                      ? getDiscordAvatarUrl(matchedDiscordUser.id, matchedDiscordUser.avatar)
-                      : (feed.participantIdentity === currentIdentity ? avatarUrl : undefined);
+                    let remoteAvatar: string | undefined = undefined;
+                    if (feed.participant?.metadata) {
+                      try {
+                        const meta = JSON.parse(feed.participant.metadata);
+                        remoteAvatar = meta.avatar;
+                      } catch {
+                        remoteAvatar = feed.participant.metadata;
+                      }
+                    }
+                    const fallbackAvatar = remoteAvatar || (feed.participantIdentity === currentIdentity ? avatarUrl : undefined);
 
                     return (
                       <VideoPlayer
@@ -938,16 +816,20 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL DE TRANSMISSÃO: Escolha entre Web e OBS */}
+      {/* MODAL DE TRANSMISSÃO OBS */}
       {isStreamModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-zinc-900/95 border border-zinc-800/90 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 backdrop-blur-md">
             {/* Header do Modal */}
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3.5">
               <div className="flex items-center gap-2.5">
-                <span className="text-lg">🚀</span>
+                <div className="h-7 w-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
+                  </svg>
+                </div>
                 <h3 className="text-base font-bold text-zinc-100">
-                  {streamModalView === 'choose' ? 'Como deseja transmitir?' : 'Configuração do OBS Studio'}
+                  Configuração do OBS Studio
                 </h3>
               </div>
               <button
@@ -962,147 +844,88 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Vista 1: Escolha entre Web e OBS */}
-            {streamModalView === 'choose' && (
-              <div className="space-y-3">
-                {/* Opção 1: Via Navegador */}
-                <button
-                  type="button"
-                  onClick={handleChooseWeb}
-                  className="w-full text-left p-4 rounded-2xl border border-zinc-800/90 bg-zinc-950/60 hover:border-indigo-500/60 hover:bg-zinc-950 transition-all group cursor-pointer shadow-sm hover:shadow-indigo-950/20 active:scale-[0.99]"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">🌐</span>
-                      <strong className="text-sm text-zinc-100 group-hover:text-indigo-300 transition">
-                        Pelo Navegador (Casual)
-                      </strong>
+            {/* Credenciais e Guia do OBS */}
+            <div className="space-y-4">
+              {whipError && (
+                <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/50 text-xs text-rose-300">
+                  {whipError}
+                </div>
+              )}
+
+              {isGeneratingWhip ? (
+                <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
+                  <div className="h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p>Provisionando servidor WHIP...</p>
+                </div>
+              ) : whipCredentials ? (
+                <div className="space-y-3.5 bg-zinc-950 border border-zinc-800/90 rounded-2xl p-4 shadow-inner">
+                  {/* Servidor */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5 text-[11px]">
+                      <span className="text-zinc-400 font-semibold">1. Servidor WHIP (URL)</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(whipCredentials.serverUrl, 'obs_url')}
+                        className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
+                      >
+                        {copiedField === 'obs_url' ? '✓ Copiado!' : 'Copiar'}
+                      </button>
                     </div>
-                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      60 FPS
-                    </span>
+                    <input
+                      type="text"
+                      readOnly
+                      value={whipCredentials.serverUrl}
+                      onClick={(e) => e.currentTarget.select()}
+                      className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
+                    />
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Zero instalações. Compartilhe sua tela, janela de jogo ou aba diretamente com 1 clique.
-                  </p>
-                </button>
 
-                {/* Opção 2: Via OBS Studio */}
-                <button
-                  type="button"
-                  onClick={handleChooseObs}
-                  className="w-full text-left p-4 rounded-2xl border border-purple-900/50 bg-purple-950/20 hover:border-purple-500/60 hover:bg-purple-950/40 transition-all group cursor-pointer shadow-sm hover:shadow-purple-950/30 active:scale-[0.99]"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">🎥</span>
-                      <strong className="text-sm text-zinc-100 group-hover:text-purple-300 transition">
-                        Pelo OBS Studio (Pro / Gamer)
-                      </strong>
-                    </div>
-                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">
-                      ⚡ 120 FPS ULTRA
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Transmita jogos pesados a 120 FPS via NVENC com o protocolo nativo WHIP e bitrate liberado.
-                  </p>
-                </button>
-              </div>
-            )}
-
-            {/* Vista 2: Credenciais e Guia do OBS */}
-            {streamModalView === 'obs_details' && (
-              <div className="space-y-4">
-                {whipError && (
-                  <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/50 text-xs text-rose-300">
-                    {whipError}
-                  </div>
-                )}
-
-                {isGeneratingWhip ? (
-                  <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
-                    <div className="h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p>Provisionando servidor WHIP...</p>
-                  </div>
-                ) : whipCredentials ? (
-                  <div className="space-y-3.5 bg-zinc-950 border border-zinc-800/90 rounded-2xl p-4 shadow-inner">
-                    {/* Servidor */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5 text-[11px]">
-                        <span className="text-zinc-400 font-semibold">1. Servidor WHIP (URL)</span>
+                  {/* Chave de Transmissão */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5 text-[11px]">
+                      <span className="text-zinc-400 font-semibold">2. Chave de Transmissão / Bearer Token</span>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(whipCredentials.serverUrl, 'obs_url')}
+                          onClick={() => setShowKey(!showKey)}
+                          className="text-zinc-500 hover:text-zinc-300 cursor-pointer text-[11px]"
+                        >
+                          {showKey ? 'Ocultar' : 'Revelar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(whipCredentials.streamKey, 'obs_key')}
                           className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
                         >
-                          {copiedField === 'obs_url' ? '✓ Copiado!' : 'Copiar'}
+                          {copiedField === 'obs_key' ? '✓ Copiado!' : 'Copiar'}
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={whipCredentials.serverUrl}
-                        onClick={(e) => e.currentTarget.select()}
-                        className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
-                      />
                     </div>
-
-                    {/* Chave de Transmissão */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5 text-[11px]">
-                        <span className="text-zinc-400 font-semibold">2. Chave de Transmissão / Bearer Token</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowKey(!showKey)}
-                            className="text-zinc-500 hover:text-zinc-300 cursor-pointer text-[11px]"
-                          >
-                            {showKey ? 'Ocultar' : 'Revelar'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(whipCredentials.streamKey, 'obs_key')}
-                            className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
-                          >
-                            {copiedField === 'obs_key' ? '✓ Copiado!' : 'Copiar'}
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        type={showKey ? 'text' : 'password'}
-                        readOnly
-                        value={whipCredentials.streamKey}
-                        onClick={(e) => e.currentTarget.select()}
-                        className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
-                      />
-                    </div>
-
-                    <div className="pt-2 text-[11px] text-zinc-400 border-t border-zinc-800/80 leading-relaxed">
-                      Dica: Clique dentro do campo para selecionar tudo e aperte <strong className="text-zinc-200">Ctrl + C</strong>, ou use o botão <strong>Copiar</strong>. No OBS, vá em <strong>Configurações ➔ Transmissão</strong>, selecione <strong>Serviço: WHIP</strong> e cole os dados.
-                    </div>
+                    <input
+                      type={showKey ? 'text' : 'password'}
+                      readOnly
+                      value={whipCredentials.streamKey}
+                      onClick={(e) => e.currentTarget.select()}
+                      className="w-full bg-zinc-900/90 border border-zinc-800 px-3.5 py-2 rounded-xl font-mono text-xs text-zinc-200 focus:outline-none focus:border-purple-500/50 cursor-pointer select-all"
+                    />
                   </div>
-                ) : null}
 
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setStreamModalView('choose')}
-                    className="text-xs font-medium text-zinc-400 hover:text-zinc-200 px-3 py-2 rounded-lg hover:bg-zinc-800/50 transition cursor-pointer"
-                  >
-                    ← Voltar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsStreamModalOpen(false)}
-                    className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-[0.98] text-xs font-semibold rounded-xl text-zinc-100 transition cursor-pointer"
-                  >
-                    Pronto
-                  </button>
+                  <div className="pt-2 text-[11px] text-zinc-400 border-t border-zinc-800/80 leading-relaxed">
+                    Dica: Clique dentro do campo para selecionar tudo e aperte <strong className="text-zinc-200">Ctrl + C</strong>, ou use o botão <strong>Copiar</strong>. No OBS, vá em <strong>Configurações ➔ Transmissão</strong>, selecione <strong>Serviço: WHIP</strong> e cole os dados.
+                  </div>
                 </div>
+              ) : null}
+
+              <div className="flex items-center justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsStreamModalOpen(false)}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-xs font-semibold rounded-xl text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer"
+                >
+                  Entendido / Fechar
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

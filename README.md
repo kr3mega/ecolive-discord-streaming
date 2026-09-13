@@ -1,7 +1,7 @@
-# 🍃 EcoLive v1.2.0 - Discord Streaming Platform
+# 🍃 EcoLive v1.3.0 - Discord Streaming Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0-emerald.svg?style=for-the-badge" alt="Version 1.2.0" />
+  <img src="https://img.shields.io/badge/version-1.3.0-emerald.svg?style=for-the-badge" alt="Version 1.3.0" />
   <img src="https://img.shields.io/badge/status-production%2024%2F7-blue.svg?style=for-the-badge" alt="Production 24/7" />
   <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
@@ -147,6 +147,14 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 ---
 
 ## 📜 8. Histórico de Versões (Changelog)
+
+### [v1.3.0] - 2026-09-13
+- **Foco Exclusivo em OBS Studio (WHIP)**: Remoção definitiva de streaming Web instável em favor de pipeline profissional de alta performance e ultra-baixa latência direto pelo OBS Studio.
+- **Identidade Protegida e Avatar Travado**: Eliminação do seletor público de perfis; autenticação Discord OAuth2 vincula automaticamente o avatar real e impede personificação indevida.
+- **Monitoramento de Cota e Banda em Tempo Real**: Telemetria discreta no cabeçalho exibindo consumo instantâneo (`Mbps`), velocidade máxima da porta e percentual utilizado da cota de 2 TB do servidor.
+- **Otimização Extrema de Recursos (Standby 0.0 Mbps)**: Polling de telemetria desativado na sala vazia, eliminando requisições passivas de fundo; taxa fixada em `0.0 Mbps` e filtro deadband no backend quando não há transmissões ativas.
+- **Detecção Inteligente do Nome da Sala**: Integração com a API RPC do Discord (`getChannel`) para exibir o nome legível do canal de voz (ex: `Sala: Estádio`).
+- **Design Minimalista e Elegante**: Interface lapidada com novos ícones vetoriais em substituição a emojis informais e simplificação de elementos visuais redundantes.
 
 ### [v1.2.0] - 2026-09-13
 - **Identidade e Avatares Oficiais do Discord**: Integração completa com OAuth2 do Discord Embedded App SDK para preenchimento automático do avatar oficial (`cdn.discordapp.com/avatars`) e nome global.
