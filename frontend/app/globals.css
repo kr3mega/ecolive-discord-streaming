@@ -31,3 +31,8 @@ nextjs-portal,
 [data-nextjs-dev-overlay] {
   display: none !important;
 }
+
+/* 📺 Modo Tela Cheia Imersivo: Oculta o cabeçalho superior do sistema */
+body.has-fullscreen-video header {
+  display: none !important;
+}

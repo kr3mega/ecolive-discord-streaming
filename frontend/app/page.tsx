@@ -300,6 +300,8 @@ export default function Home() {
     connect,
     disconnect,
     setQuality,
+    trackViewers,
+    sendWatchUpdate,
   } = useLiveKit();
 
   // Tem alguma live ativa transmitindo na sala?
@@ -379,16 +381,9 @@ export default function Home() {
       } else {
         next.delete(trackSid);
       }
+      sendWatchUpdate(trackSid, shouldWatch, displayName, avatarUrl);
       return next;
     });
-  };
-
-  const handleWatchAll = () => {
-    setWatchedTrackSids(new Set(remoteFeeds.map((f) => f.publication.trackSid)));
-  };
-
-  const handleStopWatchAll = () => {
-    setWatchedTrackSids(new Set());
   };
 
   const handleJoin = async (e?: React.SyntheticEvent) => {
@@ -730,49 +725,6 @@ export default function Home() {
               </div>
             ) : (
               <div className="flex flex-col gap-4 w-full">
-                {/* Barra de Controle Coletivo de Banda (Exibida quando há 2 ou mais transmissões na sala) */}
-                {remoteFeeds.length >= 2 && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4 sm:py-2.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 backdrop-blur-md shadow-lg">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-base">⚡</span>
-                      <span className="text-zinc-300 font-medium">
-                        {remoteFeeds.length} transmissões ativas:
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 font-bold font-mono text-[11px] border border-indigo-500/30">
-                        {remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length} assistindo
-                      </span>
-                      {remoteFeeds.length > remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length && (
-                        <span className="hidden md:inline text-[11px] text-emerald-400 font-medium">
-                          ({remoteFeeds.length - remoteFeeds.filter((f) => watchedTrackSids.has(f.publication.trackSid)).length} fechadas poupando internet)
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleWatchAll}
-                        className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-xs font-semibold text-zinc-100 transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <svg className="w-3.5 h-3.5 text-emerald-400 fill-current" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        <span>Assistir Todas</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleStopWatchAll}
-                        className="px-3 py-1.5 rounded-xl bg-zinc-800/60 hover:bg-rose-950/60 border border-zinc-700/40 hover:border-rose-800/50 active:scale-95 text-xs font-semibold text-zinc-400 hover:text-rose-200 transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        <span>Fechar Todas</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <div
                   className={`grid gap-4 w-full ${
                     remoteFeeds.length === 1
@@ -806,6 +758,7 @@ export default function Home() {
                         isWatching={watchedTrackSids.has(feed.publication.trackSid)}
                         onToggleWatch={(watching) => handleToggleWatch(feed.publication.trackSid, watching)}
                         avatarUrl={fallbackAvatar}
+                        viewers={trackViewers[feed.publication.trackSid] || []}
                       />
                     );
                   })}

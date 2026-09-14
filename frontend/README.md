@@ -1,4 +1,4 @@
-# 🍃 EcoLive Frontend - Discord Streaming Web App (v1.0.0)
+# 🍃 EcoLive Frontend - Discord Streaming Web App (v1.4.0)
 
 > **Aplicação Web Next.js 16 (App Router + Turbopack) integrada ao Discord Embedded App SDK e LiveKit Client para transmissões de tela em tempo real.**
 

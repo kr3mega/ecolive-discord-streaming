@@ -87,6 +87,13 @@ if (typeof window !== 'undefined') {
 }
 
 
+export interface ViewerInfo {
+  identity: string;
+  name: string;
+  avatar?: string;
+  isCurrentUser?: boolean;
+}
+
 export interface StreamFeed {
   participantIdentity: string;
   participantName?: string;
@@ -109,9 +116,12 @@ export function useLiveKit() {
   const [currentIdentity, setCurrentIdentity] = useState<string>('');
   const [currentRoom, setCurrentRoom] = useState<string>('');
   const [localScreenTrack, setLocalScreenTrack] = useState<LocalVideoTrack | null>(null);
+  const [trackViewers, setTrackViewers] = useState<Record<string, ViewerInfo[]>>({});
 
   const roomRef = useRef<Room | null>(null);
   const connectingRef = useRef(false);
+  const watchedTracksRef = useRef<Set<string>>(new Set());
+  const currentUserProfileRef = useRef<{ name: string; avatar?: string }>({ name: '' });
 
   // Conectar ao canal do Discord via LiveKit
   const connect = useCallback(async (channelId: string, userId: string, mode: 'web' | 'obs' = 'web', displayName?: string, avatarUrl?: string) => {
@@ -196,11 +206,105 @@ export function useLiveKit() {
       // Trilha despublicada pelo streamer
       room.on(RoomEvent.TrackUnpublished, (publication) => {
         setRemoteFeeds((prev) => prev.filter((f) => f.publication.trackSid !== publication.trackSid));
+        setTrackViewers((prev) => {
+          if (!prev[publication.trackSid]) return prev;
+          const next = { ...prev };
+          delete next[publication.trackSid];
+          return next;
+        });
       });
 
-      // Participante desconectado -> remove feeds do participante
+      // Participante desconectado -> remove feeds e status de espectador
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
         setRemoteFeeds((prev) => prev.filter((f) => f.participantIdentity !== participant.identity));
+        setTrackViewers((prev) => {
+          const next: Record<string, ViewerInfo[]> = {};
+          let changed = false;
+          Object.entries(prev).forEach(([sid, viewers]) => {
+            const filtered = viewers.filter((v) => v.identity !== participant.identity);
+            if (filtered.length !== viewers.length) changed = true;
+            next[sid] = filtered;
+          });
+          return changed ? next : prev;
+        });
+      });
+
+      // Participante novo conectado -> responde com quem o participante local está assistindo
+      room.on(RoomEvent.ParticipantConnected, () => {
+        if (watchedTracksRef.current.size > 0 && room.localParticipant) {
+          const localId = room.localParticipant.identity;
+          const name = currentUserProfileRef.current.name || room.localParticipant.name || localId;
+          const avatar = currentUserProfileRef.current.avatar;
+          watchedTracksRef.current.forEach((sid) => {
+            try {
+              const bytes = new TextEncoder().encode(JSON.stringify({
+                action: 'WATCH',
+                trackSid: sid,
+                identity: localId,
+                name,
+                avatar,
+              }));
+              room.localParticipant.publishData(bytes, { reliable: true, topic: 'viewers' });
+            } catch {}
+          });
+        }
+      });
+
+      // Sincronização de espectadores em tempo real via DataChannel (Estilo Discord Go Live)
+      room.on(RoomEvent.DataReceived, (payload: Uint8Array, _participant?: any, _kind?: any, topic?: string) => {
+        if (topic === 'viewers') {
+          try {
+            const data = JSON.parse(new TextDecoder().decode(payload));
+            if (data.action === 'WATCH' && data.trackSid && data.identity) {
+              setTrackViewers((prev) => {
+                const list = prev[data.trackSid] || [];
+                const filtered = list.filter((v) => v.identity !== data.identity);
+                const isCurrent = room.localParticipant ? data.identity === room.localParticipant.identity : false;
+                return {
+                  ...prev,
+                  [data.trackSid]: [
+                    ...filtered,
+                    {
+                      identity: data.identity,
+                      name: data.name || data.identity,
+                      avatar: data.avatar,
+                      isCurrentUser: isCurrent,
+                    },
+                  ],
+                };
+              });
+            } else if (data.action === 'UNWATCH' && data.trackSid && data.identity) {
+              setTrackViewers((prev) => {
+                const list = prev[data.trackSid] || [];
+                return {
+                  ...prev,
+                  [data.trackSid]: list.filter((v) => v.identity !== data.identity),
+                };
+              });
+            } else if (data.action === 'QUERY') {
+              // Outro participante pediu o status de quem está assistindo
+              if (watchedTracksRef.current.size > 0 && room.localParticipant) {
+                const localId = room.localParticipant.identity;
+                const name = currentUserProfileRef.current.name || room.localParticipant.name || localId;
+                const avatar = currentUserProfileRef.current.avatar;
+                watchedTracksRef.current.forEach((sid) => {
+                  try {
+                    const bytes = new TextEncoder().encode(JSON.stringify({
+                      action: 'WATCH',
+                      trackSid: sid,
+                      identity: localId,
+                      name,
+                      avatar,
+                    }));
+                    room.localParticipant.publishData(bytes, { reliable: true, topic: 'viewers' });
+                  } catch {}
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('[LiveKit Viewers DataReceived Error]:', err);
+          }
+        }
       });
 
       // Desconexão da sala
@@ -209,6 +313,8 @@ export function useLiveKit() {
         setIsScreenSharing(false);
         setLocalScreenTrack(null);
         setRemoteFeeds([]);
+        setTrackViewers({});
+        watchedTracksRef.current.clear();
       });
 
       // Se estiver rodando dentro do iframe do Discord (*.discordsays.com),
@@ -230,6 +336,12 @@ export function useLiveKit() {
       });
       roomRef.current = room;
       setIsConnected(true);
+
+      // Consulta quem já está assistindo às transmissões ativas
+      try {
+        const queryBytes = new TextEncoder().encode(JSON.stringify({ action: 'QUERY' }));
+        room.localParticipant.publishData(queryBytes, { reliable: true, topic: 'viewers' });
+      } catch {}
     } finally {
       connectingRef.current = false;
     }
@@ -244,6 +356,8 @@ export function useLiveKit() {
     setIsScreenSharing(false);
     setLocalScreenTrack(null);
     setRemoteFeeds([]);
+    setTrackViewers({});
+    watchedTracksRef.current.clear();
   }, []);
 
   // Modalidade 1: PlayWeb Casual (Nativo no Iframe via navigator.mediaDevices.getDisplayMedia)
@@ -340,6 +454,61 @@ export function useLiveKit() {
     publication.setVideoQuality(quality);
   }, []);
 
+  // Notifica os participantes da sala sobre início ou término de visualização
+  const sendWatchUpdate = useCallback((trackSid: string, isWatching: boolean, userDisplayName?: string, userAvatarUrl?: string) => {
+    if (userDisplayName) currentUserProfileRef.current.name = userDisplayName;
+    if (userAvatarUrl) currentUserProfileRef.current.avatar = userAvatarUrl;
+
+    if (isWatching) {
+      watchedTracksRef.current.add(trackSid);
+    } else {
+      watchedTracksRef.current.delete(trackSid);
+    }
+
+    if (!roomRef.current || !roomRef.current.localParticipant) return;
+
+    const localId = roomRef.current.localParticipant.identity;
+    const name = userDisplayName || currentUserProfileRef.current.name || roomRef.current.localParticipant.name || localId;
+    const avatar = userAvatarUrl || currentUserProfileRef.current.avatar;
+
+    const payload = {
+      action: isWatching ? 'WATCH' : 'UNWATCH',
+      trackSid,
+      identity: localId,
+      name,
+      avatar,
+    };
+
+    try {
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      roomRef.current.localParticipant.publishData(bytes, {
+        reliable: true,
+        topic: 'viewers',
+      });
+    } catch (err) {
+      console.warn('[sendWatchUpdate error]:', err);
+    }
+
+    setTrackViewers((prev) => {
+      const list = prev[trackSid] || [];
+      if (isWatching) {
+        if (list.some((v) => v.identity === localId)) return prev;
+        return {
+          ...prev,
+          [trackSid]: [
+            ...list,
+            { identity: localId, name, avatar, isCurrentUser: true },
+          ],
+        };
+      } else {
+        return {
+          ...prev,
+          [trackSid]: list.filter((v) => v.identity !== localId),
+        };
+      }
+    });
+  }, []);
+
   useEffect(() => {
     return () => {
       if (roomRef.current) {
@@ -359,5 +528,7 @@ export function useLiveKit() {
     disconnect,
     toggleScreenShare,
     setQuality,
+    trackViewers,
+    sendWatchUpdate,
   };
 }

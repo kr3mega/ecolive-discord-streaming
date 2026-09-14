@@ -9,6 +9,7 @@ import {
   Track,
   VideoQuality,
 } from 'livekit-client';
+import { ViewerInfo } from '../hooks/useLiveKit';
 
 interface VideoPlayerProps {
   publication?: RemoteTrackPublication;
@@ -21,6 +22,7 @@ interface VideoPlayerProps {
   isWatching?: boolean;
   onToggleWatch?: (watching: boolean) => void;
   avatarUrl?: string;
+  viewers?: ViewerInfo[];
 }
 
 interface StreamStats {
@@ -29,6 +31,110 @@ interface StreamStats {
   bitrate: number;
   rtt?: number;
   packetLoss?: number;
+}
+
+interface ViewersDropdownProps {
+  viewers: ViewerInfo[];
+}
+
+function ViewersDropdown({ viewers }: ViewersDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const count = viewers.length;
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="relative"
+      onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-zinc-800/90 border border-zinc-800/90 hover:border-zinc-700/80 text-zinc-300 hover:text-zinc-100 text-[11px] font-medium transition cursor-pointer select-none shadow-sm active:scale-95"
+      >
+        <svg
+          className={`w-3.5 h-3.5 fill-current transition-colors ${
+            count > 0 ? 'text-white drop-shadow-sm' : 'text-zinc-500'
+          }`}
+          viewBox="0 0 24 24"
+        >
+          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+        </svg>
+        <span className="font-semibold text-zinc-200">{count}</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full pt-1.5 z-50">
+          <div className="w-60 rounded-2xl bg-zinc-950/98 border border-zinc-800/90 p-3 shadow-2xl backdrop-blur-xl text-left animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800/80 text-[11px] font-semibold text-zinc-400">
+              <span className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-white fill-current" viewBox="0 0 24 24">
+                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                </svg>
+                <span>Assistindo</span>
+              </span>
+              <span className="px-1.5 py-0.5 rounded-full bg-zinc-800/90 text-white font-mono text-[10px] border border-zinc-700/80">
+                {count}
+              </span>
+            </div>
+
+          {count === 0 ? (
+            <p className="text-xs text-zinc-500 py-2 text-center">
+              Ninguém assistindo no momento
+            </p>
+          ) : (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {viewers.map((viewer, idx) => (
+                <div
+                  key={viewer.identity || idx}
+                  className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-zinc-900/80 transition"
+                >
+                  {viewer.avatar ? (
+                    <img
+                      src={viewer.avatar}
+                      alt={viewer.name}
+                      className="w-6 h-6 rounded-full object-cover border border-zinc-700/80 shrink-0 shadow-sm"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                      {viewer.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-xs font-medium text-zinc-200 truncate flex-1">
+                    {viewer.name}
+                  </span>
+                  {viewer.isCurrentUser && (
+                    <span className="text-[9px] text-emerald-400 font-semibold uppercase shrink-0 px-1 py-0.5 bg-emerald-500/10 rounded border border-emerald-500/20">
+                      Você
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function VideoPlayer({
@@ -42,6 +148,7 @@ export function VideoPlayer({
   isWatching: controlledWatching,
   onToggleWatch,
   avatarUrl,
+  viewers,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +169,23 @@ export function VideoPlayer({
   // Estado sob demanda: Transmissão local é sempre ativa; transmissões remotas iniciam pausadas por padrão
   const [internalWatching, setInternalWatching] = useState<boolean>(isLocal);
   const activeWatching = isLocal ? true : (controlledWatching !== undefined ? controlledWatching : internalWatching);
+
+  // Lista de espectadores formatada para exibição (estilo Discord Go Live)
+  const displayViewers: ViewerInfo[] = (() => {
+    const list = [...(viewers || [])];
+    if (activeWatching && !isLocal) {
+      const hasCurrentUser = list.some((v) => v.isCurrentUser);
+      if (!hasCurrentUser) {
+        list.unshift({
+          identity: 'local_user',
+          name: 'Você',
+          avatar: avatarUrl,
+          isCurrentUser: true,
+        });
+      }
+    }
+    return list;
+  })();
 
   const handleToggleWatch = useCallback((targetState?: boolean) => {
     const nextState = targetState !== undefined ? targetState : !activeWatching;
@@ -113,15 +237,18 @@ export function VideoPlayer({
     }
   }, [isMuted, volume]);
 
-  // Bloqueia rolagem do body quando em tela cheia imersiva
+  // Bloqueia rolagem do body e esconde barras quando em tela cheia imersiva
   useEffect(() => {
     if (isFullscreen) {
       document.body.style.overflow = 'hidden';
+      document.body.classList.add('has-fullscreen-video');
     } else {
       document.body.style.overflow = '';
+      document.body.classList.remove('has-fullscreen-video');
     }
     return () => {
       document.body.style.overflow = '';
+      document.body.classList.remove('has-fullscreen-video');
     };
   }, [isFullscreen]);
 
@@ -533,88 +660,119 @@ export function VideoPlayer({
       setIsMuted(true);
     }
   };
+  const shortResolution = (() => {
+    if (!stats.resolution || stats.resolution === '0x0') return '';
+    const parts = stats.resolution.split('x');
+    if (parts.length === 2) {
+      const h = parseInt(parts[1], 10);
+      if (!isNaN(h) && h > 0) {
+        if (h >= 2160) return '4K';
+        if (h >= 1440) return '1440p';
+        return `${h}p`;
+      }
+    }
+    return stats.resolution;
+  })();
+
+  const compactBitrate = stats.bitrate > 1000
+    ? `${(stats.bitrate / 1000).toFixed(1)}Mbps`
+    : `${stats.bitrate}kbps`;
 
   return (
-    <div className="group/player flex flex-col bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300">
-      {/* Barra de Controle Superior */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {effectiveAvatar ? (
-            <img
-              src={effectiveAvatar}
-              alt={participantName || participantIdentity}
-              className="h-6 w-6 rounded-full object-cover border border-zinc-700/80 shrink-0 shadow-sm"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-          ) : (
-            <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm">
-              {(participantName || participantIdentity).trim().charAt(0).toUpperCase()}
-            </div>
-          )}
-          <span
-            className={`px-2.5 py-1 text-[10px] font-semibold rounded-full uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${
-              isLocal
-                ? 'bg-blue-950/60 text-blue-300 border border-blue-500/30'
-                : isObs
-                ? 'bg-purple-950/60 text-purple-300 border border-purple-500/30 shadow-sm shadow-purple-950/40'
-                : 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30'
-            }`}
-          >
+    <div
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[99999] w-screen h-screen bg-black flex flex-col justify-center items-center overflow-hidden'
+          : 'group/player flex flex-col bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl shadow-2xl transition-all duration-300 relative'
+      }
+    >
+      {/* Barra de Controle Superior (Oculta em Tela Cheia) */}
+      {!isFullscreen && (
+        <div className="relative z-30 flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 rounded-t-2xl gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {effectiveAvatar ? (
+              <img
+                src={effectiveAvatar}
+                alt={participantName || participantIdentity}
+                className="h-6 w-6 rounded-full object-cover border border-zinc-700/80 shrink-0 shadow-sm"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm">
+                {(participantName || participantIdentity).trim().charAt(0).toUpperCase()}
+              </div>
+            )}
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                isLocal ? 'bg-blue-400' : isObs ? 'bg-purple-400' : 'bg-emerald-400'
-              } animate-pulse`}
-            />
-            {isLocal ? 'Sua Transmissão' : isObs ? 'OBS Studio (WHIP)' : 'PlayWeb Casual'}
-          </span>
-          <span
-            className="text-xs font-medium text-zinc-200 truncate"
-            title={participantName || participantIdentity}
-          >
-            {participantName || participantIdentity}
-          </span>
-        </div>
+              className="text-xs font-semibold text-zinc-200 truncate"
+              title={participantName || participantIdentity}
+            >
+              {participantName || participantIdentity}
+            </span>
+          </div>
 
-        {/* Status da Transmissão e Botão Parar de Assistir */}
-        <div className="flex items-center gap-2 shrink-0">
-          {isLocal ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-400 text-[11px] font-medium">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-              <span>Transmitindo</span>
-            </div>
-          ) : (
-            <>
-              {activeWatching ? (
-                <>
-                  <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>AO VIVO</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleWatch(false)}
-                    className="px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-rose-900/60 border border-zinc-700/60 hover:border-rose-500/50 text-zinc-300 hover:text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                    title="Fechar transmissão para economizar internet e processador"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span>Parar de Assistir</span>
-                  </button>
-                </>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-400 text-[11px] font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
-                  <span>Fechada (0 Mbps)</span>
-                </div>
-              )}
-            </>
-          )}
+          {/* Status da Transmissão e Botão Fechar */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Informações de Conexão Resumidas ao lado do Olhinho */}
+            {(activeWatching || isLocal) && stats.fps > 0 && (
+              <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-zinc-900/90 border border-zinc-800/90 text-[11px] font-mono select-none text-zinc-300 shrink-0 shadow-inner">
+                {shortResolution && <span className="font-semibold text-zinc-200">{shortResolution}</span>}
+                {shortResolution && <span className="text-zinc-600">·</span>}
+                <span
+                  className={
+                    stats.fps >= 55
+                      ? 'text-emerald-400 font-medium'
+                      : 'text-amber-400 font-medium'
+                  }
+                  style={{ color: stats.fps >= 55 ? '#34d399' : '#fbbf24' }}
+                >
+                  {stats.fps} FPS
+                </span>
+                <span className="text-zinc-600">·</span>
+                <span className="text-zinc-300">{compactBitrate}</span>
+                {typeof stats.rtt === 'number' && (
+                  <>
+                    <span className="text-zinc-600">·</span>
+                    <span className="text-emerald-400 font-medium">{stats.rtt}ms</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            <ViewersDropdown viewers={displayViewers} />
+
+            {isLocal ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-500/30 text-blue-400 text-[11px] font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                <span>Transmitindo</span>
+              </div>
+            ) : (
+              activeWatching && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleWatch(false)}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-rose-900/60 border border-zinc-700/60 hover:border-rose-500/50 text-zinc-300 hover:text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                  title="Fechar transmissão para economizar internet e processador"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>Fechar</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Wrapper de Ancoragem para transferência segura no PiP */}
-      <div ref={wrapperRef} className="relative w-full aspect-video bg-black flex items-center justify-center">
+      <div
+        ref={wrapperRef}
+        className={
+          isFullscreen
+            ? 'relative w-full h-full bg-black flex items-center justify-center overflow-hidden'
+            : 'relative z-10 w-full aspect-video bg-black flex items-center justify-center rounded-b-2xl overflow-hidden'
+        }
+      >
         {!activeWatching ? (
           /* ESTADO DISCORD: Transmissão Fechada / Aguardando Clique */
           <div className="relative w-full h-full bg-gradient-to-b from-zinc-900/95 via-zinc-950 to-black flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden group/idle">
@@ -640,16 +798,6 @@ export function VideoPlayer({
                 )}
               </div>
               <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-indigo-500/40 via-purple-500/20 to-emerald-500/30 blur-sm animate-pulse" />
-              
-              {/* Badge indicando se a fonte é OBS (120 FPS) ou Navegador */}
-              <div
-                className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-zinc-950 shadow z-20 text-[10px] flex items-center justify-center ${
-                  isObs ? 'bg-purple-600 text-white' : 'bg-emerald-500 text-zinc-950'
-                }`}
-                title={isObs ? 'OBS Studio (WHIP)' : 'PlayWeb Casual'}
-              >
-                <span>{isObs ? '🎥' : '🌐'}</span>
-              </div>
             </div>
 
             {/* Nome do Streamer e Chamada */}
@@ -671,19 +819,12 @@ export function VideoPlayer({
               </svg>
               <span>Assistir Transmissão</span>
             </button>
-            <span className="text-[10px] text-zinc-500 mt-2.5">
-              Clique para receber o fluxo de vídeo e áudio sem pesar sua rede
-            </span>
           </div>
         ) : (
           /* Container do Vídeo + HUD */
           <div
             ref={containerRef}
-            className={`${
-              isFullscreen
-                ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center group overflow-hidden'
-                : 'relative w-full h-full bg-black flex items-center justify-center group overflow-hidden'
-            }`}
+            className="relative w-full h-full bg-black flex items-center justify-center group overflow-hidden"
           >
           <video
             ref={videoRef}
@@ -697,51 +838,6 @@ export function VideoPlayer({
             }}
             className="w-full h-full object-contain"
           />
-
-          {/* HUD de Telemetria Flutuante (Bitrate / FPS / Resolução / Ping RTT / Packet Loss) */}
-          <div className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 bg-black/80 backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-white/10 flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono select-none z-20 pointer-events-none shadow-2xl flex-wrap max-w-[90%]">
-            <span className="text-zinc-200 font-semibold">{stats.resolution}</span>
-            <span className="text-zinc-600">·</span>
-            
-            {/* Indicador de Taxa de Quadros (Suporte a 120 FPS Ultra) */}
-            <span
-              className={
-                stats.fps >= 100
-                  ? 'text-cyan-300 font-bold flex items-center gap-1 drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]'
-                  : stats.fps >= 55
-                  ? 'text-emerald-400 font-medium'
-                  : 'text-amber-400 font-medium'
-              }
-            >
-              {stats.fps >= 100 ? `⚡ ${stats.fps} FPS ULTRA` : `${stats.fps} FPS`}
-            </span>
-
-            <span className="text-zinc-600">·</span>
-            <span className="text-zinc-300">
-              {stats.bitrate > 1000 ? `${(stats.bitrate / 1000).toFixed(1)} Mbps` : `${stats.bitrate} kbps`}
-            </span>
-
-            {/* Latência RTT / Ping em Tempo Real */}
-            {typeof stats.rtt === 'number' && (
-              <>
-                <span className="text-zinc-600">·</span>
-                <span className="flex items-center gap-1 text-emerald-400 font-medium" title="Latência de ida e volta (RTT / Ping)">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  {stats.rtt} ms
-                </span>
-              </>
-            )}
-
-            {/* Perda de Pacotes (Packet Loss %) */}
-            {typeof stats.packetLoss === 'number' && stats.packetLoss > 0 && (
-              <>
-                <span className="text-zinc-600">·</span>
-                <span className="text-rose-400 font-medium" title="Perda de Pacotes">
-                  {stats.packetLoss}% loss
-                </span>
-              </>
-            )}
-          </div>
 
           {/* Dock Flutuante de Controles (Áudio / PiP / Fullscreen com Ícones SVG) */}
           <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl z-20 opacity-80 group-hover:opacity-100 transition-all duration-200">
