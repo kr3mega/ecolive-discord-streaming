@@ -24,7 +24,7 @@ if (
     patchUrlMappings([
       {
         prefix: '/livekit',
-        target: 'seasonal-specialized-butterfly-jake.trycloudflare.com',
+        target: 'lk.124-198-128-214.sslip.io',
       },
     ]);
   } catch (err) {
@@ -347,7 +347,26 @@ export function useLiveKit() {
     }
   }, []);
 
+  const currentIdentityRef = useRef(currentIdentity);
+  const currentRoomRef = useRef(currentRoom);
+  currentIdentityRef.current = currentIdentity;
+  currentRoomRef.current = currentRoom;
+
   const disconnect = useCallback(() => {
+    const user = currentIdentityRef.current;
+    const room = currentRoomRef.current;
+    if (user) {
+      try {
+        // Aplica tolerância de reconexão de 5 minutos mesmo em saída manual
+        fetch('/api/ingress/terminate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user, channelId: room, immediate: false }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {}
+    }
+
     if (roomRef.current) {
       roomRef.current.disconnect();
       roomRef.current = null;
@@ -509,6 +528,35 @@ export function useLiveKit() {
     });
   }, []);
 
+  // 💓 Heartbeat da Atividade: Envia batimento a cada 15 segundos enquanto a Atividade estiver aberta
+  useEffect(() => {
+    const user = currentIdentity;
+    const room = currentRoom;
+    if (!user) return;
+
+    const sendHeartbeat = () => {
+      const activeUser = currentIdentityRef.current;
+      const activeRoom = currentRoomRef.current;
+      if (!activeUser) return;
+      fetch('/api/activity/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: activeUser, channelId: activeRoom }),
+      }).catch(() => {});
+    };
+
+    // Batimento inicial imediato ao conectar
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [currentIdentity, currentRoom]);
+
+  // 🛡️ Limpeza segura da conexão apenas quando o componente for desmontado pelo React.
+  // NÃO interceptamos beforeunload ou pagehide para permitir que confirmações do Discord
+  // (ex: "Voltar para o Discord") sejam lidas com calma sem derrubar a transmissão prematuramente.
   useEffect(() => {
     return () => {
       if (roomRef.current) {

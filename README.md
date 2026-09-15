@@ -1,7 +1,7 @@
-# 🍃 EcoLive v1.3.0 - Discord Streaming Platform
+# 🍃 EcoLive v1.5.0 - Discord Streaming Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.0-emerald.svg?style=for-the-badge" alt="Version 1.3.0" />
+  <img src="https://img.shields.io/badge/version-1.5.0-emerald.svg?style=for-the-badge" alt="Version 1.5.0" />
   <img src="https://img.shields.io/badge/status-production%2024%2F7-blue.svg?style=for-the-badge" alt="Production 24/7" />
   <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
@@ -147,6 +147,19 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 ---
 
 ## 📜 8. Histórico de Versões (Changelog)
+
+### [v1.5.0] - 2026-09-15
+- **Trava de Call e Encerramento Instantâneo de Ingress**: Ao sair da chamada (seja clicando em *"Sair"*, fechando a janela/aba/iframe da Atividade ou desconectando do canal de voz do Discord via `VOICE_STATE_UPDATE`), a transmissão é sumariamente encerrada e o Ingress é revogado.
+- **Zero Desperdício de Conexão (Eco-Bandwidth)**: Eliminação total de streams fantasmas no servidor SFU. O OBS detecta o fechamento da conexão WHIP imediatamente e avisa o streamer na hora, poupando a cota de banda do servidor e a placa de vídeo do usuário.
+- **Reativação Segura Sob Demanda**: Ao entrar em qualquer sala novamente, o stream só é reativado quando o usuário clica expressamente em *"Iniciar Transmissão"*.
+- **Rotina Semanal de Manutenção da VPS**: Configuração de cron no host para expurgo automático de caches de build do Docker, mantendo o disco otimizado e seguro.
+
+### [v1.4.0] - 2026-09-14
+- **Chave de Transmissão Permanente & Oculta por Padrão**: Configuração facilitada estilo Twitch/YouTube. A chave do streamer abre protegida e oculta por padrão (`••••••••`), com botão de alternância (*"Revelar/Ocultar"*) e cópia rápida.
+- **Painel de Confirmação Inline (Discord Sandbox Safe)**: Substituição de diálogos nativos `window.confirm()` (bloqueados silenciosamente pela política de sandbox do iframe do Discord) por componente inline integrado com botão de confirmação e cancelamento.
+- **Fechamento Automático de Modal por Gatilho**: A janela de credenciais detecta a publicação bem-sucedida do OBS na sala e se fecha automaticamente, sem exigir ação manual.
+- **Auto-Join Instantâneo**: Eliminação de atrasos e delays artificiais na tela de login ao recarregar a página ou restaurar a sessão ativa no Discord.
+- **Prevenção de Ingress Ativo Preso**: Desconexão preliminar do participante no LiveKit antes de deletar ou recriar ingressos, resolvendo travamentos em estado ACTIVE.
 
 ### [v1.3.0] - 2026-09-13
 - **Foco Exclusivo em OBS Studio (WHIP)**: Remoção definitiva de streaming Web instável em favor de pipeline profissional de alta performance e ultra-baixa latência direto pelo OBS Studio.

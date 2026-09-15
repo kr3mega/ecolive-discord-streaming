@@ -198,25 +198,107 @@ export function VideoPlayer({
 
   const [stats, setStats] = useState<StreamStats>({ resolution: '0x0', fps: 0, bitrate: 0 });
   const [isPipActive, setIsPipActive] = useState(false);
+  // 🔊 Chaves de armazenamento de volume e mudo exclusivas por live/streamer e por espectador
+  const getStreamerKey = useCallback(() => {
+    const raw = (
+      participantIdentity ||
+      participant?.identity ||
+      participantName ||
+      publication?.trackSid ||
+      'default'
+    ).trim();
+    // Remove prefixos como 'obs_' ou 'user_' para que o streamer mantenha o mesmo volume
+    // caso alterne entre OBS Studio e compartilhamento web
+    return raw.replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'default';
+  }, [participantIdentity, participant?.identity, participantName, publication?.trackSid]);
+
+  const getViewerKey = useCallback(() => {
+    if (typeof window === 'undefined') return 'current';
+    const savedId = localStorage.getItem('ecolive_user_clean_id');
+    if (savedId) return savedId.replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const savedName = localStorage.getItem('ecolive_display_name');
+    if (savedName) return savedName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    return 'current';
+  }, []);
+
+  const getStorageKeys = useCallback(() => {
+    const viewer = getViewerKey();
+    const streamer = getStreamerKey();
+    return {
+      volumeKey: `ecolive_vol_${viewer}_${streamer}`,
+      mutedKey: `ecolive_muted_${viewer}_${streamer}`,
+      streamerVolumeKey: `ecolive_volume_${streamer}`,
+      streamerMutedKey: `ecolive_muted_${streamer}`,
+    };
+  }, [getViewerKey, getStreamerKey]);
+
+  const getInitialAudioState = useCallback(() => {
+    if (typeof window === 'undefined') return { volume: 1, muted: false };
+    const { volumeKey, streamerVolumeKey, mutedKey, streamerMutedKey } = getStorageKeys();
+
+    let vol = 1;
+    const savedVol =
+      localStorage.getItem(volumeKey) ??
+      localStorage.getItem(streamerVolumeKey) ??
+      localStorage.getItem('ecolive_volume');
+
+    if (savedVol !== null) {
+      const parsed = parseFloat(savedVol);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+        vol = parsed;
+      }
+    }
+
+    let muted = false;
+    const savedMuted =
+      localStorage.getItem(mutedKey) ??
+      localStorage.getItem(streamerMutedKey) ??
+      localStorage.getItem('ecolive_muted');
+
+    if (savedMuted !== null) {
+      muted = savedMuted === 'true';
+    }
+
+    return { volume: vol, muted };
+  }, [getStorageKeys]);
+
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      const savedMuted = localStorage.getItem('ecolive_muted');
+      const viewer = (localStorage.getItem('ecolive_user_clean_id') || localStorage.getItem('ecolive_display_name') || 'current')
+        .replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'current';
+      const raw = (participantIdentity || participant?.identity || participantName || publication?.trackSid || 'default').trim();
+      const streamer = raw.replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'default';
+
+      const savedMuted =
+        localStorage.getItem(`ecolive_muted_${viewer}_${streamer}`) ??
+        localStorage.getItem(`ecolive_muted_${streamer}`) ??
+        localStorage.getItem('ecolive_muted');
       if (savedMuted !== null) {
         return savedMuted === 'true';
       }
     }
     return false;
   });
+
   const [volume, setVolume] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ecolive_volume');
-      if (saved !== null) {
-        const parsed = parseFloat(saved);
+      const viewer = (localStorage.getItem('ecolive_user_clean_id') || localStorage.getItem('ecolive_display_name') || 'current')
+        .replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'current';
+      const raw = (participantIdentity || participant?.identity || participantName || publication?.trackSid || 'default').trim();
+      const streamer = raw.replace(/^(obs_|user_)/, '').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'default';
+
+      const savedVol =
+        localStorage.getItem(`ecolive_vol_${viewer}_${streamer}`) ??
+        localStorage.getItem(`ecolive_volume_${streamer}`) ??
+        localStorage.getItem('ecolive_volume');
+      if (savedVol !== null) {
+        const parsed = parseFloat(savedVol);
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) return parsed;
       }
     }
     return 1;
   });
+
   const lastVolumeRef = useRef<number>(volume > 0 ? volume : 1);
   const isMutedRef = useRef(isMuted);
   const volumeRef = useRef(volume);
@@ -224,18 +306,38 @@ export function VideoPlayer({
   volumeRef.current = volume;
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Sincroniza o elemento de vídeo com o estado de áudio e persiste no localStorage
+  // 🔊 Sincroniza o elemento de vídeo com o estado de áudio e persiste as preferências exclusivamente por live/streamer
   useEffect(() => {
     const videoEl = videoRef.current;
     if (videoEl) {
       videoEl.muted = isMuted;
-      videoEl.volume = volume;
+      if (!isMuted) {
+        videoEl.volume = volume;
+      }
     }
     if (typeof window !== 'undefined') {
-      localStorage.setItem('ecolive_volume', volume.toString());
-      localStorage.setItem('ecolive_muted', isMuted ? 'true' : 'false');
+      const { volumeKey, streamerVolumeKey, mutedKey, streamerMutedKey } = getStorageKeys();
+      localStorage.setItem(volumeKey, volume.toString());
+      localStorage.setItem(streamerVolumeKey, volume.toString());
+      localStorage.setItem(mutedKey, isMuted ? 'true' : 'false');
+      localStorage.setItem(streamerMutedKey, isMuted ? 'true' : 'false');
     }
-  }, [isMuted, volume]);
+  }, [isMuted, volume, getStorageKeys]);
+
+  // 🔄 Ao alternar de participante ou publicação, recarrega o volume específico deste streamer
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { volume: initialVol, muted: initialMuted } = getInitialAudioState();
+    setVolume(initialVol);
+    setIsMuted(initialMuted);
+    lastVolumeRef.current = initialVol > 0 ? initialVol : 1;
+    if (videoRef.current) {
+      videoRef.current.muted = initialMuted;
+      if (!initialMuted) {
+        videoRef.current.volume = initialVol;
+      }
+    }
+  }, [getInitialAudioState]);
 
   // Bloqueia rolagem do body e esconde barras quando em tela cheia imersiva
   useEffect(() => {
@@ -276,6 +378,52 @@ export function VideoPlayer({
       if (isPipActive) setIsPipActive(false);
     }
   }, [activeWatching, isFullscreen, isPipActive]);
+
+  // YouTube-like: Oculta dock flutuante de controles e cursor do mouse após inatividade (3s)
+  const [showControls, setShowControls] = useState(false);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isVolumeHoveredRef = useRef(false);
+
+  const resetControlsTimeout = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (!isVolumeHoveredRef.current) {
+        setShowControls(false);
+      }
+    }, 3000);
+  }, []);
+
+  const handlePlayerMouseMove = useCallback(() => {
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handlePlayerMouseEnter = useCallback(() => {
+    resetControlsTimeout();
+  }, [resetControlsTimeout]);
+
+  const handlePlayerMouseLeave = useCallback(() => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    if (!isVolumeHoveredRef.current) {
+      setShowControls(false);
+    }
+  }, []);
+
+  // Mostra brevemente os controles ao iniciar a transmissão ou alternar tela cheia
+  useEffect(() => {
+    if (activeWatching) {
+      resetControlsTimeout();
+    }
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [activeWatching, isFullscreen, resetControlsTimeout]);
 
   // 1. Anexa a trilha WebRTC do LiveKit ao elemento de vídeo somente se activeWatching
   useEffect(() => {
@@ -683,13 +831,13 @@ export function VideoPlayer({
       className={
         isFullscreen
           ? 'fixed inset-0 z-[99999] w-screen h-screen bg-black flex flex-col justify-center items-center overflow-hidden'
-          : 'group/player flex flex-col bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl shadow-2xl transition-all duration-300 relative'
+          : 'group/player flex flex-col bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl shadow-2xl transition-all duration-300 relative z-0'
       }
     >
       {/* Barra de Controle Superior (Oculta em Tela Cheia) */}
       {!isFullscreen && (
-        <div className="relative z-30 flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 rounded-t-2xl gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="relative z-20 flex items-center justify-between px-4 py-2.5 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 rounded-t-2xl gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 shrink-0 max-w-[45%]">
             {effectiveAvatar ? (
               <img
                 src={effectiveAvatar}
@@ -770,7 +918,7 @@ export function VideoPlayer({
         className={
           isFullscreen
             ? 'relative w-full h-full bg-black flex items-center justify-center overflow-hidden'
-            : 'relative z-10 w-full aspect-video bg-black flex items-center justify-center rounded-b-2xl overflow-hidden'
+            : 'relative z-0 w-full aspect-video bg-black flex items-center justify-center rounded-b-2xl overflow-hidden'
         }
       >
         {!activeWatching ? (
@@ -824,7 +972,13 @@ export function VideoPlayer({
           /* Container do Vídeo + HUD */
           <div
             ref={containerRef}
-            className="relative w-full h-full bg-black flex items-center justify-center group overflow-hidden"
+            onMouseMove={handlePlayerMouseMove}
+            onMouseEnter={handlePlayerMouseEnter}
+            onMouseLeave={handlePlayerMouseLeave}
+            onClick={handlePlayerMouseMove}
+            className={`relative w-full h-full bg-black flex items-center justify-center group overflow-hidden ${
+              !showControls ? 'cursor-none' : ''
+            }`}
           >
           <video
             ref={videoRef}
@@ -839,10 +993,26 @@ export function VideoPlayer({
             className="w-full h-full object-contain"
           />
 
-          {/* Dock Flutuante de Controles (Áudio / PiP / Fullscreen com Ícones SVG) */}
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl z-20 opacity-80 group-hover:opacity-100 transition-all duration-200">
+          {/* Dock Flutuante de Controles Estilo YouTube (Áudio / PiP / Fullscreen com Ícones SVG) */}
+          <div
+            className={`absolute bottom-3 right-3 flex items-center gap-1 bg-black/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl z-20 transition-all duration-300 ${
+              showControls
+                ? 'opacity-100 pointer-events-auto translate-y-0'
+                : 'opacity-0 pointer-events-none translate-y-1'
+            }`}
+          >
             {/* Contêiner do Botão de Áudio + Regulador Vertical no Hover */}
-            <div className="relative group/volume flex items-center justify-center">
+            <div
+              className="relative group/volume flex items-center justify-center"
+              onMouseEnter={() => {
+                isVolumeHoveredRef.current = true;
+                resetControlsTimeout();
+              }}
+              onMouseLeave={() => {
+                isVolumeHoveredRef.current = false;
+                resetControlsTimeout();
+              }}
+            >
               {/* Regulador Vertical Flutuante (Aparece ao passar o mouse sobre o ícone de som) */}
               <div className="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 hidden group-hover/volume:flex flex-col items-center gap-2 bg-zinc-950/95 backdrop-blur-md px-2.5 py-3 rounded-2xl border border-white/10 shadow-2xl z-30 transition-all duration-200">
                 {/* Rótulo de Porcentagem */}
@@ -858,7 +1028,17 @@ export function VideoPlayer({
                     max="1"
                     step="0.01"
                     value={isMuted ? 0 : volume}
-                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                    onMouseDown={() => {
+                      isVolumeHoveredRef.current = true;
+                      resetControlsTimeout();
+                    }}
+                    onMouseUp={() => {
+                      resetControlsTimeout();
+                    }}
+                    onChange={(e) => {
+                      resetControlsTimeout();
+                      handleVolumeChange(parseFloat(e.target.value));
+                    }}
                     className="cursor-pointer accent-indigo-500 h-24 w-1.5 rounded-lg bg-zinc-800"
                     style={{
                       writingMode: 'vertical-lr',

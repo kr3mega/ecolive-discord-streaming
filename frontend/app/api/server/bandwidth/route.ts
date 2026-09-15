@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
+import { checkOrphanStreams } from '@/lib/streamSecurity';
 
 interface NetSample {
   rxBytes: number;
@@ -66,7 +67,11 @@ function readHostNetBytes(): { rx: number; tx: number; iface: string } | null {
 }
 
 export async function GET() {
-  const maxMbps = Number(process.env.SERVER_MAX_BANDWIDTH_MBPS) || 1000;
+  // 🛡️ Watchdog Anti-Vazamento: remove transmissões OBS de usuários que não estão na sala
+  checkOrphanStreams().catch(() => {});
+
+  const internalLimitMbps = 990; // Teto de segurança interno para evitar estouro do link físico de 1Gbps
+  const maxMbps = Number(process.env.SERVER_MAX_BANDWIDTH_MBPS) || 1000; // Exibição amigável "1 Gbps" na interface
   const totalQuotaTB = Number(process.env.SERVER_TOTAL_QUOTA_TB) || 2;
   const currentNet = readHostNetBytes();
 
@@ -114,7 +119,7 @@ export async function GET() {
         txMbps = 0;
       }
 
-      const percent = Math.min(100, Math.round((currentMbps / maxMbps) * 1000) / 10);
+      const percent = Math.min(100, Math.round((currentMbps / internalLimitMbps) * 1000) / 10);
 
       cachedResult = {
         currentMbps,
