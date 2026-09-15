@@ -490,19 +490,19 @@ export default function Home() {
       .replace(/[^a-z0-9_-]/g, '')
       .substring(0, 16);
 
-    // 🛡️ Identidade Estável: Preserva o mesmo ID em Nova Janela, F5 ou Reconexão
+    // 🛡️ Identidade Estável: Preserva o mesmo ID em qualquer sala, chamada ou reconexão
     let cleanUserId = '';
     if (detectedDiscordUser && detectedDiscordUser.id) {
       cleanUserId = `${sanitizedId}_${detectedDiscordUser.id.substring(detectedDiscordUser.id.length - 6)}`;
     } else if (typeof window !== 'undefined') {
       const savedCleanId = localStorage.getItem('ecolive_user_clean_id');
-      if (savedCleanId && savedCleanId.startsWith(sanitizedId)) {
+      if (savedCleanId && (savedCleanId === sanitizedId || savedCleanId.startsWith(sanitizedId))) {
         cleanUserId = savedCleanId;
       }
     }
 
     if (!cleanUserId) {
-      cleanUserId = `${sanitizedId}_${Math.random().toString(36).substring(2, 6)}`;
+      cleanUserId = sanitizedId;
       if (typeof window !== 'undefined') {
         localStorage.setItem('ecolive_user_clean_id', cleanUserId);
       }
@@ -549,6 +549,22 @@ export default function Home() {
     try {
       console.log(`[EcoLive Join] Conectando à sala "${targetRoom}" como "${name}" (${cleanUserId})...`);
       await connect(targetRoom, cleanUserId, 'web', name, effectiveAvatar);
+
+      // 🚀 Sincronização Automática de Ingress entre Salas:
+      // Ao entrar em qualquer sala (Call X -> Call Y), atualiza o Ingress existente para apontar para a nova sala
+      // sem exigir que o usuário reabra o modal ou reconfigure o OBS!
+      fetch('/api/ingress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: targetRoom,
+          userId: cleanUserId,
+          name: name,
+          avatar: effectiveAvatar,
+        }),
+      }).catch((syncErr) => {
+        console.warn('[EcoLive Ingress Sync] Falha ao sincronizar sala do Ingress:', syncErr);
+      });
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : 'Falha ao conectar à sala.');
     } finally {
@@ -768,7 +784,7 @@ export default function Home() {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
               <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 shrink-0">
-                v1.4.0
+                v1.5.2
               </span>
             </div>
             <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa</p>

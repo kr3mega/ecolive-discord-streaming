@@ -1,7 +1,7 @@
-# 🍃 EcoLive v1.5.1 - Discord Streaming Platform
+# 🍃 EcoLive v1.5.2 - Discord Streaming Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.5.1-emerald.svg?style=for-the-badge" alt="Version 1.5.1" />
+  <img src="https://img.shields.io/badge/version-1.5.2-emerald.svg?style=for-the-badge" alt="Version 1.5.2" />
   <img src="https://img.shields.io/badge/status-production%2024%2F7-blue.svg?style=for-the-badge" alt="Production 24/7" />
   <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
@@ -147,6 +147,11 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 ---
 
 ## 📜 8. Histórico de Versões (Changelog)
+
+### [v1.5.2] - 2026-09-15
+- **Sincronização Automática de Ingress entre Chamadas**: Eliminação definitiva da necessidade de reconfigurar o OBS ao trocar de canal de voz (Call X ➔ Call Y). Ao entrar em qualquer sala, o Ingress permanente do usuário é automaticamente migrado para a nova sala em segundo plano, mantendo a mesma chave válida para sempre.
+- **Identidade Estável Unificada**: Correção na geração de identificadores de sessão, prevenindo a proliferação de credenciais órfãs e garantindo que o mesmo streamer sempre reutilize seu Ingress pessoal único em qualquer canal.
+- **Atualização Visual da Interface**: Correção do badge de versão no cabeçalho da aplicação para exibir a versão atual `v1.5.2`.
 
 ### [v1.5.1] - 2026-09-15
 - **Hotfix: Restauração da Chave Permanente do OBS**: Correção crítica que impedia a persistência da chave de transmissão entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no OBS (estilo Twitch), com redirecionamento de sala dinâmico e isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.

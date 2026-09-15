@@ -37,11 +37,18 @@ export async function POST(req: NextRequest) {
 
     // 🛡️ Busca se o usuário já possui um Ingress permanente configurado (em qualquer sala)
     const ingresses = await client.listIngress().catch(() => []);
-    const userIngresses = ingresses.filter(
-      (ing) =>
-        (ing.participantIdentity === participantIdentity || ing.name === `obs-${cleanId}`) &&
-        Boolean(ing.streamKey)
-    );
+    const baseCleanId = cleanId.split('_')[0].toLowerCase();
+    const userIngresses = ingresses.filter((ing) => {
+      if (!ing.streamKey) return false;
+      const ingPart = (ing.participantIdentity || '').replace(/^obs_/, '').toLowerCase();
+      const ingName = (ing.name || '').replace(/^obs-/, '').toLowerCase();
+      return (
+        ing.participantIdentity === participantIdentity ||
+        ing.name === `obs-${cleanId}` ||
+        ingPart === cleanId.toLowerCase() ||
+        (baseCleanId.length >= 3 && (ingPart.startsWith(baseCleanId) || ingName.startsWith(baseCleanId)))
+      );
+    });
 
     let primaryIngress: IngressInfo | null = userIngresses[0] || null;
 
