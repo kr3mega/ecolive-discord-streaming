@@ -26,11 +26,10 @@ Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em 
 * **🚀 Latência Ultra-Baixa Real (< 200ms):** Conexão direta WebRTC via UDP sobre SFU, sendo de **10 a 20 vezes mais rápida** que plataformas tradicionais como Twitch e YouTube.
 * **🎭 Avatares e Identidade Oficial do Discord (OAuth2):** Autenticação transparente integrada ao *Discord Embedded App SDK*. O aplicativo carrega a foto de perfil original do Discord de quem entra e lista todos os amigos conectados no canal com seleção em 1 clique.
 * **⚡ Transmissão Sob Demanda (Estilo Discord):** Cada espectador escolhe individualmente quais transmissões abrir através de um botão central *"Assistir Transmissão"*. Streams fechadas operam em **0 kbps** no SFU, poupando totalmente o processador, a placa de vídeo e a largura de banda do espectador.
-* **🎥 Dupla Modalidade de Transmissão:**
-  * **PlayWeb Casual (Nativo no Iframe):** Captura de tela com 1 clique diretamente pelo navegador (`getDisplayMedia`). Zero downloads, zero scripts, rodando isolado na sandbox do Discord com Simulcast por hardware em 3 camadas.
-  * **OBS Studio Profissional (WHIP):** Ingestão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat de nível de Kernel (Riot Vanguard, Easy Anti-Cheat).
-* **🖥️ Grid Dinâmico Multistream & Controles em Lote:** Vários usuários podem transmitir simultaneamente na mesma sala com suporte a botões rápidos de *"Assistir Todas"* e *"Fechar Todas"*.
-* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping), Perda de Pacotes (*Packet Loss*) e janela retrátil de logs com cópia em 1 clique.
+* **🎥 Modalidade de Transmissão Profissional:**
+  * **OBS Studio (WHIP):** Transmissão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat de nível de Kernel (Riot Vanguard, Easy Anti-Cheat).
+* **🖥️ Grid Dinâmico Multistream & Controles em Lote:** Vários usuários podem transmitir e assistir simultaneamente na mesma sala.
+* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e quantidade de espectadores assistindo a cada transmissão.
 * **☁️ Infraestrutura Autônoma 24/7:** Hospedado em VPS com link de 1 Gbit/s em São Paulo, Proxy Reverso Caddy com certificados SSL automáticos da Let's Encrypt (`*.sslip.io`) e reinicialização automática em containers Docker.
 
 ---
@@ -95,7 +94,6 @@ flowchart TD
 ## 🔒 5. Segurança & Isolamento de Credenciais (Zero-Leakage)
 
 * **Zero-Leakage no Frontend:** Nenhuma chave secreta ou token sensível reside no código do cliente ou usa o prefixo `NEXT_PUBLIC_`. O `DISCORD_CLIENT_SECRET` é mantido exclusivamente no backend para a troca de código OAuth2.
-* **Tokens JWT de Curta Duração:** Os tokens de acesso à sala WebRTC são gerados dinamicamente via `/api/token` com TTL de 4 horas e assinados no backend.
 * **Isolamento de Salas:** As salas são vinculadas rigidamente ao `channel_id` do canal de voz do Discord. Usuários em canais de voz diferentes operam em universos WebRTC 100% isolados.
 * **Anti-Cache:** Todas as respostas da API de credenciais contam com cabeçalhos `Cache-Control: no-store, no-cache, must-revalidate` para mitigar armazenamento em proxies intermediários.
 
