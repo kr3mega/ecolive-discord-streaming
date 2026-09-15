@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/streaming-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
 </p>
 
-> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Suporta streaming direto pelo navegador e ingestão profissional via OBS Studio (WHIP) com até 120 FPS.**  
+> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com streaming profissional via OBS Studio (WHIP) com até 120 FPS.**  
 > *Autor: Kayque Reis ([@kr3mega](https://github.com/kr3mega))*
 
 ---
