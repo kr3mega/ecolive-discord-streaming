@@ -289,7 +289,7 @@ export default function Home() {
                                 fetch('/api/ingress/terminate', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ channelId: targetChannelId, userId: clean, deleteIngress: true }),
+                                  body: JSON.stringify({ channelId: targetChannelId, userId: clean, deleteIngress: false }),
                                   keepalive: true,
                                 }).catch(() => {});
                               }
@@ -609,14 +609,14 @@ export default function Home() {
       fetch('/api/ingress/terminate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: room, userId: user, deleteIngress: true }),
+        body: JSON.stringify({ channelId: room, userId: user, deleteIngress: false }),
         keepalive: true,
       }).catch(() => {});
     }
     disconnect();
   };
 
-  // 🛡️ Encerra imediatamente a transmissão do OBS caso a aba/janela ou iframe seja fechado
+  // 🛡️ Encerra a transmissão na chamada caso a aba/janela ou iframe seja fechado (chave permanente preservada)
   useEffect(() => {
     const handleLeave = () => {
       if (typeof window === 'undefined') return;
@@ -624,7 +624,7 @@ export default function Home() {
       const user = currentIdentity || savedCleanId || displayName.trim();
       const room = currentRoom || channelId.trim();
       if (user && room) {
-        const payload = JSON.stringify({ channelId: room, userId: user, deleteIngress: true });
+        const payload = JSON.stringify({ channelId: room, userId: user, deleteIngress: false });
         if (navigator.sendBeacon) {
           const blob = new Blob([payload], { type: 'application/json' });
           navigator.sendBeacon('/api/ingress/terminate', blob);

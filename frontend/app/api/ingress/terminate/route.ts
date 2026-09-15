@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     let channelId = '';
     let rawUserId = '';
     let isImmediate = false;
-    let deleteIngress = true;
+    let deleteIngress = false;
 
     const contentType = req.headers.get('content-type') || '';
 
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       channelId = body.channelId || body.room;
       rawUserId = body.userId || body.username || body.identity;
       isImmediate = body.immediate === true;
-      deleteIngress = body.deleteIngress !== false;
+      deleteIngress = body.deleteIngress === true || body.resetKey === true;
     } else {
       const text = await req.text().catch(() => '');
       try {
@@ -23,13 +23,13 @@ export async function POST(req: NextRequest) {
         channelId = body.channelId || body.room;
         rawUserId = body.userId || body.username || body.identity;
         isImmediate = body.immediate === true;
-        deleteIngress = body.deleteIngress !== false;
+        deleteIngress = body.deleteIngress === true || body.resetKey === true;
       } catch {
         const params = new URLSearchParams(text);
         channelId = params.get('channelId') || params.get('room') || '';
         rawUserId = params.get('userId') || params.get('username') || params.get('identity') || '';
         isImmediate = params.get('immediate') === 'true';
-        deleteIngress = params.get('deleteIngress') !== 'false';
+        deleteIngress = params.get('deleteIngress') === 'true' || params.get('resetKey') === 'true';
       }
     }
 

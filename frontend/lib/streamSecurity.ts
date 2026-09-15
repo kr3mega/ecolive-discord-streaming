@@ -3,9 +3,11 @@ import { IngressClient, RoomServiceClient } from 'livekit-server-sdk';
 /**
  * Encerra imediatamente a transmissão do OBS vinculada a um usuário e sala específicos.
  * - Desconecta forçadamente o participante obs_${cleanId} da sala LiveKit para cessar o streaming no ar.
- * - Revoga e deleta o Ingress para fechar a conexão WHIP imediatamente (fazendo o OBS acusar desconexão).
+ * - Preserva a Chave Permanente: move o Ingress para sala 'offline-${cleanId}' para não poluir a chamada,
+ *   garantindo que a chave salva no OBS continue sempre válida.
+ * - Apenas deleta o Ingress se deleteIngress for explicitamente true (ex: 'Redefinir Chave').
  */
-export async function terminateObsStream(roomName?: string, cleanId?: string, deleteIngress: boolean = true) {
+export async function terminateObsStream(roomName?: string, cleanId?: string, deleteIngress: boolean = false) {
   if (!cleanId) return;
 
   const apiKey = process.env.LIVEKIT_API_KEY;
@@ -54,6 +56,28 @@ export async function terminateObsStream(roomName?: string, cleanId?: string, de
       }
     } catch (err) {
       console.warn(`[Segurança EcoLive] Falha ao deletar Ingress para ${targetObsIdentity}:`, err);
+    }
+  } else {
+    // Preserva a Chave Permanente: move o destino do Ingress para sala offline
+    try {
+      const ingressClient = new IngressClient(livekitUrl, apiKey, apiSecret);
+      const ingresses = await ingressClient.listIngress().catch(() => []);
+      for (const ing of ingresses) {
+        if (
+          (ing.participantIdentity === targetObsIdentity ||
+            ing.name === `obs-${cleanId}` ||
+            ing.participantIdentity === cleanId) &&
+          ing.ingressId
+        ) {
+          await ingressClient.updateIngress(ing.ingressId, {
+            name: `obs-${cleanId}`,
+            roomName: `offline-${cleanId}`,
+            participantIdentity: targetObsIdentity,
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn(`[Segurança EcoLive] Falha ao mover Ingress de ${targetObsIdentity} para offline:`, err);
     }
   }
 }
