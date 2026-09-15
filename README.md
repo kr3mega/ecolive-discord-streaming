@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/streaming-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
 </p>
 
-> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com streaming profissional via OBS Studio (WHIP) com até 120 FPS.**  
+> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com streaming profissional via OBS Studio (WHIP) em até 120 FPS.**  
 > *Autor: Kayque Reis ([@kr3mega](https://github.com/kr3mega))*
 
 ---
@@ -23,13 +23,13 @@ Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em 
 
 ## ⚡ 2. Principais Funcionalidades & Diferenciais
 
-* **🚀 Latência Ultra-Baixa Real (< 200ms):** Conexão direta WebRTC via UDP sobre SFU, sendo de **10 a 20 vezes mais rápida** que plataformas tradicionais como Twitch e YouTube.
-* **🎭 Avatares e Identidade Oficial do Discord (OAuth2):** Autenticação transparente integrada ao *Discord Embedded App SDK*. O aplicativo carrega a foto de perfil original do Discord de quem entra e lista todos os amigos conectados no canal com seleção em 1 clique.
-* **⚡ Transmissão Sob Demanda (Estilo Discord):** Cada espectador escolhe individualmente quais transmissões abrir através de um botão central *"Assistir Transmissão"*. Streams fechadas operam em **0 kbps** no SFU, poupando totalmente o processador, a placa de vídeo e a largura de banda do espectador.
+* **🚀 Latência Ultra-Baixa real para usuários do Brasil (< 200ms):** Conexão direta WebRTC via UDP sobre SFU, sendo de **10 a 20 vezes mais rápida** que plataformas tradicionais como Twitch e YouTube.
+* **🎭 Avatares e Identidade Oficial do Discord (OAuth2):** Autenticação transparente integrada ao *Discord Embedded App SDK*. O aplicativo carrega a foto de perfil original do Discord de quem entra e permite gerar uma chave exclusiva e permanente de transmissão para cada usuário.
+* **⚡ Transmissão Sob Demanda (Estilo Discord):** Cada espectador escolhe individualmente quais transmissões deseja abrir através de um botão central *"Assistir Transmissão"*. Streams fechadas operam em **0 kbps** no SFU, poupando totalmente o processador, a placa de vídeo e a largura de banda do espectador.
 * **🎥 Modalidade de Transmissão Profissional:**
-  * **OBS Studio (WHIP):** Transmissão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat de nível de Kernel (Riot Vanguard, Easy Anti-Cheat).
-* **🖥️ Grid Dinâmico Multistream & Controles em Lote:** Vários usuários podem transmitir e assistir simultaneamente na mesma sala.
-* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e quantidade de espectadores assistindo a cada transmissão.
+  * **OBS Studio (WHIP):** Transmissão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat a nível de Kernel (Riot Vanguard, Easy Anti-Cheat, etc...).
+* **🖥️ Grid Dinâmico Multistream:** Vários usuários podem transmitir e assistir simultaneamente na mesma sala.
+* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e a quantidade de espectadores assistindo a cada transmissão.
 * **☁️ Infraestrutura Autônoma 24/7:** Hospedado em VPS com link de 1 Gbit/s em São Paulo, Proxy Reverso Caddy com certificados SSL automáticos da Let's Encrypt (`*.sslip.io`) e reinicialização automática em containers Docker.
 
 ---
