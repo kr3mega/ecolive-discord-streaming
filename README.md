@@ -150,11 +150,10 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 
 ### [v1.5.2] - 2026-09-15
 - **Sincronização Automática de Ingress entre Chamadas**: Eliminação definitiva da necessidade de reconfigurar o OBS ao trocar de canal de voz (Call X ➔ Call Y). Ao entrar em qualquer sala, o Ingress permanente do usuário é automaticamente migrado para a nova sala em segundo plano, mantendo a mesma chave válida para sempre.
-- **Identidade Estável Unificada**: Correção na geração de identificadores de sessão, prevenindo a proliferação de credenciais órfãs e garantindo que o mesmo streamer sempre reutilize seu Ingress pessoal único em qualquer canal.
 - **Atualização Visual da Interface**: Correção do badge de versão no cabeçalho da aplicação para exibir a versão atual `v1.5.2`.
 
 ### [v1.5.1] - 2026-09-15
-- **Hotfix: Restauração da Chave Permanente do OBS**: Correção crítica que impedia a persistência da chave de transmissão entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no OBS (estilo Twitch), com redirecionamento de sala dinâmico e isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.
+- **Hotfix: Restauração da Chave Permanente do OBS**: Correção crítica que impedia a persistência da chave de transmissão entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no OBS (estilo Twitch), com isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.
 
 ### [v1.5.0] - 2026-09-15
 - **Trava de Call e Encerramento Instantâneo de Ingress**: Ao sair da chamada (seja clicando em *"Sair"*, fechando a janela/aba/iframe da Atividade ou desconectando do canal de voz do Discord via `VOICE_STATE_UPDATE`), a transmissão é sumariamente encerrada e o Ingress é revogado.
