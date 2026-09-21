@@ -15,7 +15,7 @@
 
 ## 🎯 1. Visão Geral do Projeto
 
-O **EcoApp** é uma Atividade oficial (*Embedded App*) para o Discord desenvolvida para resolver as limitações de qualidade, estabilidade e latência de transmissões convencionais. 
+O **EcoApp** é uma Atividade oficial (*Embedded App*) para o Discord desenvolvida para resolver as limitações de qualidade, estabilidade e latência de mídia convencionais. 
 
 Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em São Paulo (Brasil), o sistema entrega vídeo de alta fidelidade (**1080p a 60 / 120 FPS**) com latência inferior a **200ms**, permitindo que amigos assistam a gameplays e interajam em tempo real como se estivessem no mesmo cômodo.
 
