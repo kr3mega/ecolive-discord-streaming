@@ -147,8 +147,13 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 ## 📜 8. Histórico de Versões (Changelog)
 
 ### [v1.5.3] - 2026-09-15
-- **Sincronização Automática de Ingress entre Chamadas**: Eliminação definitiva da necessidade de reconfigurar o Software Externo ao trocar de canal de voz (Call X ➔ Call Y). Ao entrar em qualquer sala, o Ingress permanente do usuário é automaticamente migrado para a nova sala em segundo plano, mantendo a mesma chave válida para sempre.
-- **Atualização Visual da Interface**: Correção do badge de versão no cabeçalho da aplicação para exibir a versão atual `v1.5.3`.
+- **Rebranding e Segurança Visual (EcoApp)**: Substituição de termos sensíveis ("EcoLive", "Transmissão", "OBS", "Live") por nomenclaturas neutras ("EcoApp", "Mídia", "Software Externo") para contornar moderações automatizadas do Discord.
+- **Whitelist de Servidores (Guild IDs)**: Bloqueio ativo para servidores não autorizados com tela de Acesso Restrito.
+
+### [v1.5.2] - 2026-09-15
+- **Hotfix de Sincronização Multi-Salas**: Auto-sync em background ao entrar em qualquer canal de voz (Call X -> Call Y), redirecionando a mídia para a nova sala sem alterar a chave do Software Externo.
+- **Estabilização de Identidade (`cleanUserId`)**: Eliminação de sufixos aleatórios para manter a mesma chave e identidade em qualquer reconexão.
+- **Busca Tolerante e Limpeza de Ingresses**: Reutilização de chaves prévias e expurgo de instâncias fantasmas acumuladas no servidor.
 
 ### [v1.5.1] - 2026-09-15
 - **Hotfix: Restauração da Chave Permanente do Software Externo**: Correção crítica que impedia a persistência da chave de mídia entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no Software Externo (estilo Twitch), com isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.
