@@ -1,4 +1,4 @@
-# 🍃 EcoApp v1.5.3 - Discord Sincronização P2P Platform
+# 🍃 EcoApp v1.5.3 - Discord Sincronization P2P Platform
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.5.3-emerald.svg?style=for-the-badge" alt="Version 1.5.3" />
