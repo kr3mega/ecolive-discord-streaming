@@ -1,21 +1,21 @@
-# 🍃 EcoLive v1.5.2 - Discord Streaming Platform
+# 🍃 EcoApp v1.5.3 - Discord Sincronização P2P Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.5.2-emerald.svg?style=for-the-badge" alt="Version 1.5.2" />
+  <img src="https://img.shields.io/badge/version-1.5.3-emerald.svg?style=for-the-badge" alt="Version 1.5.3" />
   <img src="https://img.shields.io/badge/status-production%2024%2F7-blue.svg?style=for-the-badge" alt="Production 24/7" />
   <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
-  <img src="https://img.shields.io/badge/streaming-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
+  <img src="https://img.shields.io/badge/sincronização-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
 </p>
 
-> **Plataforma de transmissão WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com streaming profissional via OBS Studio (WHIP) em até 120 FPS.**  
+> **Plataforma de mídia WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com sincronização profissional via Software Externo Studio (WHIP) em até 120 FPS.**  
 > *Autor: Kayque Reis ([@kr3mega](https://github.com/kr3mega))*
 
 ---
 
 ## 🎯 1. Visão Geral do Projeto
 
-O **EcoLive** é uma Atividade oficial (*Embedded App*) para o Discord desenvolvida para resolver as limitações de qualidade, estabilidade e latência de transmissões convencionais. 
+O **EcoApp** é uma Atividade oficial (*Embedded App*) para o Discord desenvolvida para resolver as limitações de qualidade, estabilidade e latência de transmissões convencionais. 
 
 Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em São Paulo (Brasil), o sistema entrega vídeo de alta fidelidade (**1080p a 60 / 120 FPS**) com latência inferior a **200ms**, permitindo que amigos assistam a gameplays e interajam em tempo real como se estivessem no mesmo cômodo.
 
@@ -24,12 +24,12 @@ Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em 
 ## ⚡ 2. Principais Funcionalidades & Diferenciais
 
 * **🚀 Latência Ultra-Baixa real para usuários do Brasil (< 200ms):** Conexão direta WebRTC via UDP sobre SFU, sendo de **10 a 20 vezes mais rápida** que plataformas tradicionais como Twitch e YouTube.
-* **🎭 Avatares e Identidade Oficial do Discord (OAuth2):** Autenticação transparente integrada ao *Discord Embedded App SDK*. O aplicativo carrega a foto de perfil original do Discord de quem entra e permite gerar uma chave exclusiva e permanente de transmissão para cada usuário.
-* **⚡ Transmissão Sob Demanda (Estilo Discord):** Cada espectador escolhe individualmente quais transmissões deseja abrir através de um botão central *"Assistir Transmissão"*. Streams fechadas operam em **0 kbps** no SFU, poupando totalmente o processador, a placa de vídeo e a largura de banda do espectador.
-* **🎥 Modalidade de Transmissão Profissional:**
-  * **OBS Studio (WHIP):** Transmissão em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat a nível de Kernel (Riot Vanguard, Easy Anti-Cheat, etc...).
+* **🎭 Avatares e Identidade Oficial do Discord (OAuth2):** Autenticação transparente integrada ao *Discord Embedded App SDK*. O aplicativo carrega a foto de perfil original do Discord de quem entra e permite gerar uma chave exclusiva e permanente de mídia para cada usuário.
+* **⚡ Mídia Sob Demanda (Estilo Discord):** Cada espectador escolhe individualmente quais transmissões deseja abrir através de um botão central *"Assistir Mídia"*. Streams fechadas operam em **0 kbps** no SFU, poupando totalmente o processador, a placa de vídeo e a largura de banda do espectador.
+* **🎥 Modalidade de Mídia Profissional:**
+  * **Software Externo Studio (WHIP):** Mídia em tempo real via protocolo WHIP (*WebRTC HTTP Ingestion*) com **Passthrough puro**: o stream sai direto da GPU (NVENC/AMF/AV1) para o servidor sem consumir processamento de CPU e blindado contra travamentos de Anti-Cheat a nível de Kernel (Riot Vanguard, Easy Anti-Cheat, etc...).
 * **🖥️ Grid Dinâmico Multistream:** Vários usuários podem transmitir e assistir simultaneamente na mesma sala.
-* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e a quantidade de espectadores assistindo a cada transmissão.
+* **📊 HUD de Telemetria & Painel de Diagnóstico:** Painel de diagnóstico integrado ao player mostrando Resolução, FPS decodificado, Bitrate em Mbps, Latência (Ping) e a quantidade de espectadores assistindo a cada mídia.
 * **☁️ Infraestrutura Autônoma 24/7:** Hospedado em VPS com link de 1 Gbit/s em São Paulo, Proxy Reverso Caddy com certificados SSL automáticos da Let's Encrypt (`*.sslip.io`) e reinicialização automática em containers Docker.
 
 ---
@@ -40,7 +40,7 @@ Operando sobre um cluster WebRTC SFU (*Selective Forwarding Unit*) hospedado em 
 flowchart TD
     subgraph Clients ["👥 Clientes & Transmissores"]
         WebUser["🌐 PlayWeb Casual\n(Navegador / DisplayMedia)"]
-        ObsUser["🎥 OBS Studio\n(WHIP Passthrough 120 FPS)"]
+        ObsUser["🎥 Software Externo Studio\n(WHIP Passthrough 120 FPS)"]
         DiscordUser["🎮 Discord App / Web / Mobile\n(Espectadores no Canal de Voz)"]
     end
 
@@ -83,7 +83,7 @@ flowchart TD
 | Camada | Tecnologias Utilizadas |
 | :--- | :--- |
 | **Frontend** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack), [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS v4](https://tailwindcss.com/) |
-| **Streaming & WebRTC** | [LiveKit Client SDK](https://github.com/livekit/client-sdk-js), [LiveKit React Components](https://github.com/livekit/components-js), LiveKit Server SDK |
+| **Sincronização P2P & WebRTC** | [LiveKit Client SDK](https://github.com/livekit/client-sdk-js), [LiveKit React Components](https://github.com/livekit/components-js), LiveKit Server SDK |
 | **Integração Discord** | [@discord/embedded-app-sdk](https://github.com/discord/embedded-app-sdk), OAuth2 Flow Nativo |
 | **Servidores de Mídia** | [LiveKit Server](https://github.com/livekit/livekit) (Go SFU), [LiveKit Ingress](https://github.com/livekit/ingress) (WHIP Server), [Redis](https://redis.io/) (Alpine) |
 | **Borda e Segurança** | [Caddy Server](https://caddyserver.com/) (HTTP/3, TLS automático Let's Encrypt), UFW Firewall |
@@ -107,8 +107,8 @@ flowchart TD
 
 ### 1. Clonar o Repositório
 ```bash
-git clone https://github.com/kr3mega/ecolive-discord-streaming.git
-cd ecolive-discord-streaming
+git clone https://github.com/kr3mega/ecolive-discord-sincronização.git
+cd ecolive-discord-sincronização
 ```
 
 ### 2. Configurar o Frontend
@@ -146,28 +146,28 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 
 ## 📜 8. Histórico de Versões (Changelog)
 
-### [v1.5.2] - 2026-09-15
-- **Sincronização Automática de Ingress entre Chamadas**: Eliminação definitiva da necessidade de reconfigurar o OBS ao trocar de canal de voz (Call X ➔ Call Y). Ao entrar em qualquer sala, o Ingress permanente do usuário é automaticamente migrado para a nova sala em segundo plano, mantendo a mesma chave válida para sempre.
-- **Atualização Visual da Interface**: Correção do badge de versão no cabeçalho da aplicação para exibir a versão atual `v1.5.2`.
+### [v1.5.3] - 2026-09-15
+- **Sincronização Automática de Ingress entre Chamadas**: Eliminação definitiva da necessidade de reconfigurar o Software Externo ao trocar de canal de voz (Call X ➔ Call Y). Ao entrar em qualquer sala, o Ingress permanente do usuário é automaticamente migrado para a nova sala em segundo plano, mantendo a mesma chave válida para sempre.
+- **Atualização Visual da Interface**: Correção do badge de versão no cabeçalho da aplicação para exibir a versão atual `v1.5.3`.
 
 ### [v1.5.1] - 2026-09-15
-- **Hotfix: Restauração da Chave Permanente do OBS**: Correção crítica que impedia a persistência da chave de transmissão entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no OBS (estilo Twitch), com isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.
+- **Hotfix: Restauração da Chave Permanente do Software Externo**: Correção crítica que impedia a persistência da chave de mídia entre sessões e salas. A chave agora permanece ativa e válida ininterruptamente no Software Externo (estilo Twitch), com isolamento automático em desconexão de call, sem jamais invalidar as credenciais salvas no software do streamer.
 
 ### [v1.5.0] - 2026-09-15
-- **Trava de Call e Encerramento Instantâneo de Ingress**: Ao sair da chamada (seja clicando em *"Sair"*, fechando a janela/aba/iframe da Atividade ou desconectando do canal de voz do Discord via `VOICE_STATE_UPDATE`), a transmissão é sumariamente encerrada e o Ingress é revogado.
-- **Zero Desperdício de Conexão (Eco-Bandwidth)**: Eliminação total de streams fantasmas no servidor SFU. O OBS detecta o fechamento da conexão WHIP imediatamente e avisa o streamer na hora, poupando a cota de banda do servidor e a placa de vídeo do usuário.
-- **Reativação Segura Sob Demanda**: Ao entrar em qualquer sala novamente, o stream só é reativado quando o usuário clica expressamente em *"Iniciar Transmissão"*.
+- **Trava de Call e Encerramento Instantâneo de Ingress**: Ao sair da chamada (seja clicando em *"Sair"*, fechando a janela/aba/iframe da Atividade ou desconectando do canal de voz do Discord via `VOICE_STATE_UPDATE`), a mídia é sumariamente encerrada e o Ingress é revogado.
+- **Zero Desperdício de Conexão (Eco-Bandwidth)**: Eliminação total de streams fantasmas no servidor SFU. O Software Externo detecta o fechamento da conexão WHIP imediatamente e avisa o streamer na hora, poupando a cota de banda do servidor e a placa de vídeo do usuário.
+- **Reativação Segura Sob Demanda**: Ao entrar em qualquer sala novamente, o stream só é reativado quando o usuário clica expressamente em *"Iniciar Mídia"*.
 - **Rotina Semanal de Manutenção da VPS**: Configuração de cron no host para expurgo automático de caches de build do Docker, mantendo o disco otimizado e seguro.
 
 ### [v1.4.0] - 2026-09-14
-- **Chave de Transmissão Permanente & Oculta por Padrão**: Configuração facilitada estilo Twitch/YouTube. A chave do streamer abre protegida e oculta por padrão (`••••••••`), com botão de alternância (*"Revelar/Ocultar"*) e cópia rápida.
+- **Chave de Mídia Permanente & Oculta por Padrão**: Configuração facilitada estilo Twitch/YouTube. A chave do streamer abre protegida e oculta por padrão (`••••••••`), com botão de alternância (*"Revelar/Ocultar"*) e cópia rápida.
 - **Painel de Confirmação Inline (Discord Sandbox Safe)**: Substituição de diálogos nativos `window.confirm()` (bloqueados silenciosamente pela política de sandbox do iframe do Discord) por componente inline integrado com botão de confirmação e cancelamento.
-- **Fechamento Automático de Modal por Gatilho**: A janela de credenciais detecta a publicação bem-sucedida do OBS na sala e se fecha automaticamente, sem exigir ação manual.
+- **Fechamento Automático de Modal por Gatilho**: A janela de credenciais detecta a publicação bem-sucedida do Software Externo na sala e se fecha automaticamente, sem exigir ação manual.
 - **Auto-Join Instantâneo**: Eliminação de atrasos e delays artificiais na tela de login ao recarregar a página ou restaurar a sessão ativa no Discord.
 - **Prevenção de Ingress Ativo Preso**: Desconexão preliminar do participante no LiveKit antes de deletar ou recriar ingressos, resolvendo travamentos em estado ACTIVE.
 
 ### [v1.3.0] - 2026-09-13
-- **Foco Exclusivo em OBS Studio (WHIP)**: Remoção definitiva de streaming Web instável em favor de pipeline profissional de alta performance e ultra-baixa latência direto pelo OBS Studio.
+- **Foco Exclusivo em Software Externo Studio (WHIP)**: Remoção definitiva de sincronização Web instável em favor de pipeline profissional de alta performance e ultra-baixa latência direto pelo Software Externo Studio.
 - **Identidade Protegida e Avatar Travado**: Eliminação do seletor público de perfis; autenticação Discord OAuth2 vincula automaticamente o avatar real e impede personificação indevida.
 - **Monitoramento de Cota e Banda em Tempo Real**: Telemetria discreta no cabeçalho exibindo consumo instantâneo (`Mbps`), velocidade máxima da porta e percentual utilizado da cota de 2 TB do servidor.
 - **Otimização Extrema de Recursos (Standby 0.0 Mbps)**: Polling de telemetria desativado na sala vazia, eliminando requisições passivas de fundo; taxa fixada em `0.0 Mbps` e filtro deadband no backend quando não há transmissões ativas.
@@ -181,15 +181,15 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 - **Tratamento de Exceções OAuth2**: Diagnóstico automático para exigência de Redirect URI no portal do desenvolvedor.
 
 ### [v1.1.0] - 2026-09-13
-- **Transmissão Sob Demanda**: Quadros remotos fechados por padrão com botão central *"Assistir Transmissão"*, reduzindo o tráfego do espectador para **0 kbps** no estado ocioso.
+- **Mídia Sob Demanda**: Quadros remotos fechados por padrão com botão central *"Assistir Mídia"*, reduzindo o tráfego do espectador para **0 kbps** no estado ocioso.
 - **Controles em Lote**: Botões de ação rápida *"Assistir Todas"* e *"Fechar Todas"* quando houver múltiplos streams.
 - **Botão Parar de Assistir**: Permite pausar e liberar recursos de CPU/GPU a qualquer instante sem sair da sala.
 - **Janela de Diagnóstico**: Console de logs retrátil integrado ao login com cópia instantânea para a área de transferência.
 
 ### [v1.0.0] - 2026-09-12
 - **Lançamento Oficial da Infraestrutura 24/7**: Cluster WebRTC SFU LiveKit com proxy reverso Caddy e SSL automático em São Paulo.
-- **Modo OBS Studio (WHIP)**: Transmissão a 1080p @ 120 FPS via GPU Passthrough.
-- **Modo PlayWeb**: Transmissão nativa pelo navegador no iframe do Discord.
+- **Modo Software Externo Studio (WHIP)**: Mídia a 1080p @ 120 FPS via GPU Passthrough.
+- **Modo PlayWeb**: Mídia nativa pelo navegador no iframe do Discord.
 
 ---
 

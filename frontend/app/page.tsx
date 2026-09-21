@@ -59,6 +59,7 @@ export default function Home() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const isJoiningRef = useRef(false);
   const [isDiscordReady, setIsDiscordReady] = useState(false);
+  const [isRestricted, setIsRestricted] = useState(false);
   const [autoJoinEnabled, setAutoJoinEnabled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('ecolive_auto_join') !== 'false';
@@ -197,6 +198,15 @@ export default function Home() {
           ),
         ]);
 
+        
+        const allowedGuilds = ['1506471002757140660', '1550327956231028817'];
+        if (discordSdk.guildId && !allowedGuilds.includes(discordSdk.guildId)) {
+            console.log('[Discord SDK] Acesso negado para o servidor:', discordSdk.guildId);
+            setIsRestricted(true);
+            setIsDiscordReady(true);
+            return;
+        }
+
         let authenticatedUser: DiscordParticipant | null = null;
 
         // 1. Tenta autenticar a sessão oficial do Discord Activity
@@ -273,7 +283,7 @@ export default function Home() {
                       localStorage.setItem('ecolive_channel_name', channel.name);
                     }
 
-                    // 🛡️ Trava na Call: Encerra a transmissão do OBS se, e somente se o usuário sair do canal de voz
+                    // 🛡️ Trava na Call: Encerra a mídia do Software Externo se, e somente se o usuário sair do canal de voz
                     try {
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       await (discordSdk as any).subscribe(
@@ -283,7 +293,7 @@ export default function Home() {
                           if (voiceEvent?.user?.id === authenticatedUser?.id) {
                             const currentVoiceChannel = voiceEvent?.voice_state?.channel_id;
                             if (!currentVoiceChannel || currentVoiceChannel !== targetChannelId) {
-                              console.log('[Discord SDK] 🛑 Usuário desconectou do canal de voz! Encerrando transmissão OBS...');
+                              console.log('[Discord SDK] 🛑 Usuário desconectou do canal de voz! Encerrando mídia OBS...');
                               const clean = localStorage.getItem('ecolive_user_clean_id') || authenticatedUser?.username;
                               if (clean) {
                                 fetch('/api/ingress/terminate', {
@@ -344,7 +354,7 @@ export default function Home() {
     initDiscord();
   }, []);
 
-  // Estados do Modal de Transmissão via OBS
+  // Estados do Modal de Mídia via Software Externo
   const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
   const [isGeneratingWhip, setIsGeneratingWhip] = useState(false);
   const [whipCredentials, setWhipCredentials] = useState<WhipCredentials | null>(null);
@@ -354,7 +364,7 @@ export default function Home() {
   // Modal de confirmação inline para "Redefinir Chave" (substitui o confirm() nativo bloqueado pelo Discord)
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   // Controla se o modal foi aberto ENQUANTO a live já estava no ar
-  // Se sim, o modal NÃO fecha automaticamente ao detectar a transmissão
+  // Se sim, o modal NÃO fecha automaticamente ao detectar a mídia
   const modalOpenedDuringLiveRef = useRef(false);
 
   const {
@@ -372,7 +382,7 @@ export default function Home() {
   // Tem alguma live ativa transmitindo na sala?
   const hasActiveStreams = isConnected && remoteFeeds.length > 0;
 
-  // Identifica se a minha própria transmissão do OBS está ativa nesta sala
+  // Identifica se a minha própria mídia do Software Externo está ativa nesta sala
   const myCleanUserId = (
     currentIdentity ||
     (typeof window !== 'undefined' ? localStorage.getItem('ecolive_user_clean_id') : '') ||
@@ -427,10 +437,10 @@ export default function Home() {
     };
   }, [isConnected, hasActiveStreams]);
 
-  // Transmissões remotas assistidas sob demanda (estilo Discord)
+  // Mídias remotas assistidas sob demanda (estilo Discord)
   const [watchedTrackSids, setWatchedTrackSids] = useState<Set<string>>(new Set());
 
-  // Limpa SIDs de transmissões encerradas
+  // Limpa SIDs de mídias encerradas
   useEffect(() => {
     setWatchedTrackSids((prev) => {
       const activeSids = new Set(remoteFeeds.map((f) => f.publication.trackSid));
@@ -547,7 +557,7 @@ export default function Home() {
     setIsJoining(true);
     setJoinError(null);
     try {
-      console.log(`[EcoLive Join] Conectando à sala "${targetRoom}" como "${name}" (${cleanUserId})...`);
+      console.log(`[EcoApp Join] Conectando à sala "${targetRoom}" como "${name}" (${cleanUserId})...`);
       await connect(targetRoom, cleanUserId, 'web', name, effectiveAvatar);
 
       // 🚀 Sincronização Automática de Ingress entre Salas:
@@ -563,7 +573,7 @@ export default function Home() {
           avatar: effectiveAvatar,
         }),
       }).catch((syncErr) => {
-        console.warn('[EcoLive Ingress Sync] Falha ao sincronizar sala do Ingress:', syncErr);
+        console.warn('[EcoApp Ingress Sync] Falha ao sincronizar sala do Ingress:', syncErr);
       });
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : 'Falha ao conectar à sala.');
@@ -611,7 +621,7 @@ export default function Home() {
       return;
     }
 
-    console.log('[EcoLive Auto-Join] Disparando entrada instantânea exatamente como no clique...');
+    console.log('[EcoApp Auto-Join] Disparando entrada instantânea exatamente como no clique...');
     handleJoin();
   }, [isConnected, isJoining, isDiscordReady, channelId, displayName, detectedDiscordUser]);
 
@@ -632,7 +642,7 @@ export default function Home() {
     disconnect();
   };
 
-  // 🛡️ Encerra a transmissão na chamada caso a aba/janela ou iframe seja fechado (chave permanente preservada)
+  // 🛡️ Encerra a mídia na chamada caso a aba/janela ou iframe seja fechado (chave permanente preservada)
   useEffect(() => {
     const handleLeave = () => {
       if (typeof window === 'undefined') return;
@@ -668,7 +678,7 @@ export default function Home() {
   const handleOpenObsModal = async (forceNew: boolean = false) => {
     // Sempre abre com a chave oculta por segurança
     setShowKey(false);
-    // Registra se a live do OBS já estava ativa quando o modal foi aberto
+    // Registra se a live do Software Externo já estava ativa quando o modal foi aberto
     // Usado para impedir que o modal feche automaticamente (está revisando configs, não configurando)
     modalOpenedDuringLiveRef.current = hasMyActiveObsStream;
     setIsStreamModalOpen(true);
@@ -721,7 +731,7 @@ export default function Home() {
 
   const handleOpenStreamModal = handleOpenObsModal;
 
-  // ✅ Fecha o modal automaticamente quando o OBS inicia a transmissão com a chave correta.
+  // ✅ Fecha o modal automaticamente quando o OBS inicia a mídia com a chave correta.
   // Só fecha se o modal foi aberto ANTES de a live começar (primeira configuração).
   // Se o usuário abriu o modal enquanto a live já estava no ar, ele permanece aberto.
   useEffect(() => {
@@ -772,6 +782,22 @@ export default function Home() {
     setTimeout(() => setCopiedField(null), 2500);
   };
 
+  if (isRestricted) {
+    return (
+      <main className="min-h-screen bg-[#0d0e12] text-zinc-100 flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full bg-zinc-900/80 border border-red-500/30 p-8 rounded-2xl text-center space-y-4">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-3xl">⛔</span>
+          </div>
+          <h2 className="text-2xl font-bold text-red-400">Acesso Restrito</h2>
+          <p className="text-zinc-400 text-sm">
+            Este aplicativo privado não está autorizado para uso neste servidor do Discord.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#0d0e12] text-zinc-100 flex flex-col items-center selection:bg-indigo-600/40">
       {/* Barra de Navegação Superior */}
@@ -782,12 +808,12 @@ export default function Home() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
+              <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoApp</h1>
               <span className="text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm shadow-emerald-500/10 shrink-0">
-                v1.5.2
+                v1.5.3
               </span>
             </div>
-            <p className="hidden md:block text-[11px] text-zinc-400 truncate">Streaming Descentralizado • Latência Ultra-Baixa</p>
+            <p className="hidden md:block text-[11px] text-zinc-400 truncate">Sincronização P2P Otimizada • Latência Ultra-Baixa</p>
           </div>
         </div>
 
@@ -795,7 +821,7 @@ export default function Home() {
         {isConnected && serverBandwidth && (
           <div
             className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono shadow-inner select-none shrink-0"
-            title={`Tráfego Geral do Servidor (LiveKit + Ingress + Web)\nDownload: ${serverBandwidth.rxMbps} Mbps | Upload: ${serverBandwidth.txMbps} Mbps\nCota do Servidor: ${serverBandwidth.totalUsedGB} GB usados de ${serverBandwidth.totalQuotaTB} TB (${serverBandwidth.quotaPercent}%)`}
+            title={`Tráfego Geral do Servidor (P2P + Servidor)\nDownload: ${serverBandwidth.rxMbps} Mbps | Upload: ${serverBandwidth.txMbps} Mbps\nCota do Servidor: ${serverBandwidth.totalUsedGB} GB usados de ${serverBandwidth.totalQuotaTB} TB (${serverBandwidth.quotaPercent}%)`}
           >
             <div className="flex items-center gap-1.5">
               <span
@@ -872,8 +898,8 @@ export default function Home() {
               <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
                 <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
               </svg>
-              <span className="hidden sm:inline">Iniciar Transmissão</span>
-              <span className="sm:hidden">OBS</span>
+              <span className="hidden sm:inline">Iniciar Mídia</span>
+              <span className="sm:hidden">Software Externo</span>
             </button>
 
             <button
@@ -899,9 +925,9 @@ export default function Home() {
                     🍃
                   </div>
                 </div>
-                <h2 className="text-lg font-bold text-zinc-100">Bem-vindo ao EcoLive</h2>
+                <h2 className="text-lg font-bold text-zinc-100">Bem-vindo ao EcoApp</h2>
                 <p className="text-xs text-zinc-400 mt-1">
-                  Transmissões em tempo real via OBS.
+                  Mídias em tempo real via Software Externo.
                 </p>
 
               </div>
@@ -1026,7 +1052,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-base font-bold text-zinc-100">A sala está pronta</h3>
                 <p className="text-xs text-zinc-400 max-w-sm mt-1.5 mb-6 leading-relaxed">
-                  Nenhuma transmissão ativa no momento.
+                  Nenhuma mídia ativa no momento.
                 </p>
 
                 {/* BOTÃO INICIAR TRANSMISSÃO NO CENTRO */}
@@ -1038,7 +1064,7 @@ export default function Home() {
                   <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
                     <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
                   </svg>
-                  <span>Iniciar Transmissão</span>
+                  <span>Iniciar Mídia</span>
                 </button>
               </div>
             ) : (
@@ -1050,7 +1076,7 @@ export default function Home() {
                       : 'grid-cols-1 lg:grid-cols-2'
                   }`}
                 >
-                  {/* Transmissões dos Participantes via OBS Studio */}
+                  {/* Mídias dos Participantes via Software Externo */}
                   {remoteFeeds.map((feed) => {
                     let remoteAvatar: string | undefined = undefined;
                     if (feed.participant?.metadata) {
@@ -1099,7 +1125,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-zinc-100">
-                    Configuração do OBS
+                    Configuração do Software Externo
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
                     Chave Permanente
@@ -1118,7 +1144,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Credenciais e Guia do OBS */}
+            {/* Credenciais e Guia do Software Externo */}
             <div className="space-y-4">
               {whipError && (
                 <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/50 text-xs text-rose-300">
@@ -1154,10 +1180,10 @@ export default function Home() {
                     />
                   </div>
 
-                  {/* Chave de Transmissão */}
+                  {/* Chave de Mídia */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5 text-[11px]">
-                      <span className="text-zinc-400 font-semibold">2. Chave de Transmissão (Fixa)</span>
+                      <span className="text-zinc-400 font-semibold">2. Chave de Mídia (Fixa)</span>
                       <div className="flex items-center gap-2.5">
                         {!showResetConfirm && (
                           <button
@@ -1199,7 +1225,7 @@ export default function Home() {
                     {showResetConfirm && (
                       <div className="mt-2 p-3 rounded-xl bg-rose-950/60 border border-rose-700/50 flex flex-col gap-2">
                         <p className="text-[11px] text-rose-300 leading-snug">
-                          ⚠️ <strong>A chave anterior será invalidada.</strong> Você precisará colar a nova chave no OBS antes de transmitir novamente. Deseja continuar?
+                          ⚠️ <strong>A chave anterior será invalidada.</strong> Você precisará colar a nova chave no Software Externo antes de transmitir novamente. Deseja continuar?
                         </p>
                         <div className="flex items-center gap-2 justify-end">
                           <button
@@ -1224,7 +1250,7 @@ export default function Home() {
                   {/* Dica — oculta enquanto o painel de confirmação estiver visível */}
                   {!showResetConfirm && (
                     <div className="pt-2 text-[11px] text-zinc-400 border-t border-zinc-800/80 leading-relaxed">
-                      Dica: Esta é a sua <strong className="text-emerald-400">Chave Pessoal Permanente</strong> (estilo Twitch)! Configure uma única vez no OBS. Depois disso, basta entrar na chamada com seus amigos e apertar <strong className="text-zinc-200">Iniciar Transmissão</strong> no OBS para a live entrar no ar automaticamente.
+                      Dica: Esta é a sua <strong className="text-emerald-400">Chave Pessoal Permanente</strong> (estilo Twitch)! Configure uma única vez no Software Externo. Depois disso, basta entrar na chamada com seus amigos e apertar <strong className="text-zinc-200">Iniciar Mídia</strong> no Software Externo para a mídia iniciar automaticamente.
                     </div>
                   )}
                 </div>

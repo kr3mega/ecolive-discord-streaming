@@ -166,7 +166,7 @@ export function VideoPlayer({
     return undefined;
   })();
 
-  // Estado sob demanda: Transmissão local é sempre ativa; transmissões remotas iniciam pausadas por padrão
+  // Estado sob demanda: Mídia local é sempre ativa; mídias remotas iniciam pausadas por padrão
   const [internalWatching, setInternalWatching] = useState<boolean>(isLocal);
   const activeWatching = isLocal ? true : (controlledWatching !== undefined ? controlledWatching : internalWatching);
 
@@ -371,7 +371,7 @@ export function VideoPlayer({
     }
   }, [activeWatching, publication, participant, isLocal]);
 
-  // Se o usuário fechar a transmissão, encerra Fullscreen e PiP caso estejam ativos
+  // Se o usuário fechar a mídia, encerra Fullscreen e PiP caso estejam ativos
   useEffect(() => {
     if (!activeWatching) {
       if (isFullscreen) setIsFullscreen(false);
@@ -413,7 +413,7 @@ export function VideoPlayer({
     }
   }, []);
 
-  // Mostra brevemente os controles ao iniciar a transmissão ou alternar tela cheia
+  // Mostra brevemente os controles ao iniciar a mídia ou alternar tela cheia
   useEffect(() => {
     if (activeWatching) {
       resetControlsTimeout();
@@ -858,7 +858,7 @@ export function VideoPlayer({
             </span>
           </div>
 
-          {/* Status da Transmissão e Botão Fechar */}
+          {/* Status da Mídia e Botão Fechar */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Informações de Conexão Resumidas ao lado do Olhinho */}
             {(activeWatching || isLocal) && stats.fps > 0 && (
@@ -899,7 +899,7 @@ export function VideoPlayer({
                   type="button"
                   onClick={() => handleToggleWatch(false)}
                   className="px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-rose-900/60 border border-zinc-700/60 hover:border-rose-500/50 text-zinc-300 hover:text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-                  title="Fechar transmissão para economizar internet e processador"
+                  title="Fechar mídia para economizar internet e processador"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -922,7 +922,7 @@ export function VideoPlayer({
         }
       >
         {!activeWatching ? (
-          /* ESTADO DISCORD: Transmissão Fechada / Aguardando Clique */
+          /* ESTADO DISCORD: Mídia Fechada / Aguardando Clique */
           <div className="relative w-full h-full bg-gradient-to-b from-zinc-900/95 via-zinc-950 to-black flex flex-col items-center justify-center p-6 text-center select-none overflow-hidden group/idle">
             {/* Efeito de luz ambiente de fundo */}
             <div className="absolute inset-0 bg-radial from-indigo-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
@@ -953,7 +953,7 @@ export function VideoPlayer({
               {participantName || participantIdentity}
             </h4>
             <p className="text-[11px] sm:text-xs text-zinc-400 max-w-xs mb-4">
-              {isObs ? 'Transmissão via OBS Studio (WHIP)' : 'Compartilhamento de Tela via Navegador'}
+              {isObs ? 'Mídia via Software Externo (WHIP)' : 'Compartilhamento de Janela via Navegador'}
             </p>
 
             {/* BOTÃO BRANCO CENTRAL ESTILO DISCORD */}
@@ -965,7 +965,7 @@ export function VideoPlayer({
               <svg className="w-4 h-4 text-zinc-950 fill-current" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              <span>Assistir Transmissão</span>
+              <span>Reproduzir Mídia</span>
             </button>
           </div>
         ) : (
