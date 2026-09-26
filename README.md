@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/next.js-16%20(Turbopack)-black.svg?style=for-the-badge" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/webrtc-LiveKit%20SFU-orange.svg?style=for-the-badge" alt="LiveKit SFU" />
   <img src="https://img.shields.io/badge/sincronização-1080p%20%40%20120%20FPS-purple.svg?style=for-the-badge" alt="1080p 120 FPS" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Proprietary-red.svg?style=for-the-badge" alt="License: Proprietary" /></a>
 </p>
 
 > **Plataforma de mídia WebRTC de ultra-baixa latência integrada nativamente aos canais de voz do Discord (*Discord Embedded App / Activity*). Com sincronização profissional via Software Externo Studio (WHIP) em até 120 FPS.**  
@@ -200,10 +201,12 @@ Para registrar a aplicação como uma **Atividade oficial do Discord**:
 
 ## ⚖️ Licença e Direitos Autorais
 
-Este é um projeto proprietário e de portfólio pessoal desenvolvido por **Kayque Reis**.  
-Todos os direitos estão reservados.
+Este é um software proprietário desenvolvido por **Kayque Reis** ([@kr3mega](https://github.com/kr3mega)). Todos os direitos estão reservados.
 
-Recrutadores, desenvolvedores e visitantes têm total permissão para visualizar, auditar e clonar o repositório para fins de avaliação técnica e estudo. É proibida a redistribuição ou exploração comercial não autorizada de qualquer parte deste código sem autorização prévia por escrito do autor.
+O código-fonte é disponibilizado publicamente exclusivamente sob os termos da [Licença Proprietária de Uso Restrito e Isenção de Responsabilidade](LICENSE):
+* **Permissões concedidas:** Leitura, auditoria técnica e clonagem local estritamente para estudo pessoal, fins acadêmicos ou avaliação profissional por recrutadores.
+* **Restrições absolutas:** Proibida qualquer exploração comercial, redistribuição, revenda, sublicenciamento ou operação como serviço (SaaS/plataforma concorrente) sem autorização prévia, expressa e formal por escrito do autor.
+* **Isenção de Garantia e Responsabilidade ("AS IS"):** O software é fornecido no estado em que se encontra, sem garantias de qualquer natureza. Em nenhuma hipótese o autor será responsável por danos, perdas operacionais, interrupções ou custos decorrentes do uso deste código.
 
 ---
 

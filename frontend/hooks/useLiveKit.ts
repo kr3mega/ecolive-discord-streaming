@@ -124,7 +124,15 @@ export function useLiveKit() {
   const currentUserProfileRef = useRef<{ name: string; avatar?: string }>({ name: '' });
 
   // Conectar ao canal do Discord via LiveKit
-  const connect = useCallback(async (channelId: string, userId: string, mode: 'web' | 'obs' = 'web', displayName?: string, avatarUrl?: string) => {
+  const connect = useCallback(async (
+    channelId: string,
+    userId: string,
+    mode: 'web' | 'obs' = 'web',
+    displayName?: string,
+    avatarUrl?: string,
+    guildId?: string,
+    channelName?: string
+  ) => {
     if (connectingRef.current || roomRef.current) return;
     connectingRef.current = true;
 
@@ -135,6 +143,8 @@ export function useLiveKit() {
         mode,
         ...(displayName ? { name: displayName } : {}),
         ...(avatarUrl ? { avatar: avatarUrl } : {}),
+        ...(guildId ? { guildId } : {}),
+        ...(channelName ? { channelName } : {}),
       });
 
       const res = await fetch(`/api/token?${queryParams.toString()}`);

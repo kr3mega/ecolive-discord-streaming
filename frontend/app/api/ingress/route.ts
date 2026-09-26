@@ -1,6 +1,8 @@
 import { IngressClient, IngressInfo, IngressInput } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { terminateObsStream } from '@/lib/streamSecurity';
+import { guildRegistry } from '@/lib/guildRegistry';
+import { checkGuildAccess } from '@/lib/guildStorage';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,12 +12,25 @@ export async function POST(req: NextRequest) {
     const displayName = body.name || rawUserId;
     const avatarUrl = body.avatar || body.avatarUrl;
     const forceNew = body.forceNew === true;
+    const guildId = body.guildId || undefined;
+    const channelName = body.channelName || undefined;
 
     if (!channelId || !rawUserId) {
       return NextResponse.json(
         { error: 'Campos "channelId" e "userId" são obrigatórios no JSON.' },
         { status: 400 }
       );
+    }
+
+    if (guildId) {
+      const access = checkGuildAccess(guildId);
+      if (!access.authorized) {
+        return NextResponse.json(
+          { error: 'Acesso negado para este servidor Discord.', reason: access.reason },
+          { status: 403 }
+        );
+      }
+      guildRegistry.registerChannel(channelId, guildId, channelName);
     }
 
     const cleanId = rawUserId.replace(/^(user_|obs_)/, '');
@@ -81,13 +96,19 @@ export async function POST(req: NextRequest) {
         console.log(
           `[API Ingress] 🔀 Atualizando sala do Ingress permanente de ${participantIdentity}: "${primaryIngress.roomName}" ➔ "${channelId}" (chave preservada)`
         );
+        const ingressMetaObj: Record<string, unknown> = {};
+        if (avatarUrl) ingressMetaObj.avatar = avatarUrl;
+        if (guildId) ingressMetaObj.guildId = guildId;
+        if (channelName) ingressMetaObj.channelName = channelName;
+        const ingressMetadataStr = Object.keys(ingressMetaObj).length > 0 ? JSON.stringify(ingressMetaObj) : undefined;
+
         try {
           await client.updateIngress(primaryIngress.ingressId!, {
             name: `obs-${cleanId}`,
             roomName: channelId,
             participantIdentity,
             participantName: displayName,
-            participantMetadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
+            participantMetadata: ingressMetadataStr,
             bypassTranscoding: true,
           });
         } catch (updateErr) {
@@ -115,13 +136,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ingressMetaObj: Record<string, unknown> = {};
+    if (avatarUrl) ingressMetaObj.avatar = avatarUrl;
+    if (guildId) ingressMetaObj.guildId = guildId;
+    if (channelName) ingressMetaObj.channelName = channelName;
+    const ingressMetadataStr = Object.keys(ingressMetaObj).length > 0 ? JSON.stringify(ingressMetaObj) : undefined;
+
     // Se não existir, cria a nova chave de transmissão pessoal e permanente para o usuário
     const info = await client.createIngress(IngressInput.WHIP_INPUT, {
       name: `obs-${cleanId}`,
       roomName: channelId,
       participantIdentity,
       participantName: displayName,
-      participantMetadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
+      participantMetadata: ingressMetadataStr,
       bypassTranscoding: true,
     });
 

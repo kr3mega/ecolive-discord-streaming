@@ -1,5 +1,7 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { guildRegistry } from '@/lib/guildRegistry';
+import { checkGuildAccess } from '@/lib/guildStorage';
 
 function resolveServerUrl(req: NextRequest): string {
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '127.0.0.1';
@@ -28,12 +30,25 @@ export async function GET(req: NextRequest) {
   const mode = searchParams.get('mode') || 'web'; // 'web' (PlayWeb Casual) ou 'obs'
   const displayName = searchParams.get('name') || rawUserId;
   const avatarUrl = searchParams.get('avatar');
+  const guildId = searchParams.get('guildId') || undefined;
+  const channelName = searchParams.get('channelName') || undefined;
 
   if (!channelId || !rawUserId) {
     return NextResponse.json(
       { error: 'Parâmetros "channelId" (ou "room") e "userId" (ou "username") são obrigatórios.' },
       { status: 400 }
     );
+  }
+
+  if (guildId) {
+    const access = checkGuildAccess(guildId);
+    if (!access.authorized) {
+      return NextResponse.json(
+        { error: 'Acesso negado para este servidor Discord.', reason: access.reason },
+        { status: 403 }
+      );
+    }
+    guildRegistry.registerChannel(channelId, guildId, channelName);
   }
 
   // 🛡️ Regra da Especificação: Identidade Única
@@ -51,10 +66,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const metaPayload: Record<string, unknown> = {};
+    if (avatarUrl) metaPayload.avatar = avatarUrl;
+    if (guildId) metaPayload.guildId = guildId;
+    if (channelName) metaPayload.channelName = channelName;
+
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
       name: displayName || undefined,
-      metadata: avatarUrl ? JSON.stringify({ avatar: avatarUrl }) : undefined,
+      metadata: Object.keys(metaPayload).length > 0 ? JSON.stringify(metaPayload) : undefined,
       ttl: '4h', // TTL curto de 4 horas para máxima segurança
     });
 
@@ -109,6 +129,20 @@ export async function POST(req: NextRequest) {
 
     const cleanId = rawUserId.replace(/^(user_|obs_)/, '');
     const participantIdentity = mode === 'obs' ? `obs_${cleanId}` : `user_${cleanId}`;
+    const guildId = body.guildId || undefined;
+    const channelName = body.channelName || undefined;
+    const avatarUrl = body.avatar || body.avatarUrl || undefined;
+
+    if (guildId) {
+      const access = checkGuildAccess(guildId);
+      if (!access.authorized) {
+        return NextResponse.json(
+          { error: 'Acesso negado para este servidor Discord.', reason: access.reason },
+          { status: 403 }
+        );
+      }
+      guildRegistry.registerChannel(channelId, guildId, channelName);
+    }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -120,9 +154,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const metaPayload: Record<string, unknown> = {};
+    if (avatarUrl) metaPayload.avatar = avatarUrl;
+    if (guildId) metaPayload.guildId = guildId;
+    if (channelName) metaPayload.channelName = channelName;
+
     const at = new AccessToken(apiKey, apiSecret, {
       identity: participantIdentity,
       name: displayName || undefined,
+      metadata: Object.keys(metaPayload).length > 0 ? JSON.stringify(metaPayload) : undefined,
       ttl: '4h', // TTL curto de 4 horas para máxima segurança
     });
 

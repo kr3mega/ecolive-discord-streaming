@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       console.log(`[Webhook LiveKit] Participante ${identity} saiu da sala ${event.room?.name}`);
       if (identity && identity.startsWith('user_')) {
         const cleanId = identity.replace(/^user_/, '');
-        console.log(`[Webhook LiveKit] 🛑 Usuário ${cleanId} saiu da call! Desconectando feed da sala (chave permanente preservada)...`);
+        console.log(`[Webhook LiveKit] Usuário ${cleanId} saiu da call! Desconectando feed da sala (chave permanente preservada)...`);
         await terminateObsStream(event.room?.name, cleanId, false).catch((err) => {
           console.warn(`[Webhook LiveKit] Erro ao desvincular Ingress de ${cleanId}:`, err);
         });

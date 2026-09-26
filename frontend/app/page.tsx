@@ -112,18 +112,6 @@ export default function Home() {
   const [detectedDiscordUser, setDetectedDiscordUser] = useState<DiscordParticipant | null>(null);
   const [discordSdkStatus, setDiscordSdkStatus] = useState<string>('Verificando conexão...');
 
-  // Monitoramento discreto de banda da VPS
-  const [serverBandwidth, setServerBandwidth] = useState<{
-    currentMbps: number;
-    maxMbps: number;
-    percent: number;
-    rxMbps: number;
-    txMbps: number;
-    totalUsedGB: number;
-    totalQuotaTB: number;
-    quotaPercent: number;
-  } | null>(null);
-
 
   // Auto-detecta o ID do canal de voz do Discord, participantes conectados e restaura preferências salvas
   useEffect(() => {
@@ -199,12 +187,48 @@ export default function Home() {
         ]);
 
         
-        const allowedGuilds = ['1506471002757140660', '1550327956231028817'];
-        if (discordSdk.guildId && !allowedGuilds.includes(discordSdk.guildId)) {
-            console.log('[Discord SDK] Acesso negado para o servidor:', discordSdk.guildId);
+        // =========================================================================
+        // [SEGURANÇA / WHITELIST DINÂMICA DE SERVIDORES - PROPOSITAL E MANDATÓRIO]
+        // Consulta dinamicamente a autorização da guilda em /api/guilds/verify.
+        // Se a guilda não estiver autorizada ou estiver pausada (ex: inadimplência Pix),
+        // o aplicativo exibe a tela de erro silencioso ("Falha na Comunicação 503").
+        // Servidores cadastrados: 1506471002757140660 (Amigos Amor) e 1550327956231028817 (6WC2026).
+        // =========================================================================
+        if (discordSdk.guildId) {
+          let isAuthorized = false;
+          let blockReason = 'unauthorized';
+
+          try {
+            const verifyRes = await fetch(`/api/guilds/verify?guildId=${encodeURIComponent(discordSdk.guildId)}`);
+            if (verifyRes.ok) {
+              const verifyData = await verifyRes.json().catch(() => ({}));
+              isAuthorized = verifyData.authorized === true;
+              blockReason = verifyData.reason || verifyData.status || 'unauthorized';
+            }
+          } catch {
+            // Fallback de segurança caso a rede local oscile no handshake
+            const fallbackAllowed = ['1506471002757140660', '1550327956231028817'];
+            isAuthorized = fallbackAllowed.includes(discordSdk.guildId);
+          }
+
+          if (!isAuthorized) {
+            console.log('[Discord SDK] Acesso restrito para o servidor:', discordSdk.guildId, blockReason);
+            fetch('/api/admin/report-blocked', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                guildId: discordSdk.guildId,
+                channelId: discordSdk.channelId || params.get('channel_id') || undefined,
+              }),
+            }).catch(() => {});
             setIsRestricted(true);
             setIsDiscordReady(true);
             return;
+          }
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('ecolive_guild_id', discordSdk.guildId);
+          }
         }
 
         let authenticatedUser: DiscordParticipant | null = null;
@@ -283,7 +307,7 @@ export default function Home() {
                       localStorage.setItem('ecolive_channel_name', channel.name);
                     }
 
-                    // 🛡️ Trava na Call: Encerra a mídia do Software Externo se, e somente se o usuário sair do canal de voz
+                    // Trava na Call: Encerra a mídia do Software Externo se, e somente se o usuário sair do canal de voz
                     try {
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       await (discordSdk as any).subscribe(
@@ -293,7 +317,7 @@ export default function Home() {
                           if (voiceEvent?.user?.id === authenticatedUser?.id) {
                             const currentVoiceChannel = voiceEvent?.voice_state?.channel_id;
                             if (!currentVoiceChannel || currentVoiceChannel !== targetChannelId) {
-                              console.log('[Discord SDK] 🛑 Usuário desconectou do canal de voz! Encerrando mídia OBS...');
+                              console.log('[Discord SDK] Usuário desconectou do canal de voz! Encerrando mídia OBS...');
                               const clean = localStorage.getItem('ecolive_user_clean_id') || authenticatedUser?.username;
                               if (clean) {
                                 fetch('/api/ingress/terminate', {
@@ -392,50 +416,7 @@ export default function Home() {
 
   const hasMyActiveObsStream = isConnected && remoteFeeds.some((f) => f.participantIdentity === `obs_${myCleanUserId}`);
 
-  // Monitoramento de banda sob demanda:
-  // - Sem live ativa: Zera pooling para poupar rede e define taxa em 0.0 Mbps
-  // - Com live ativa: Inicia pooling a cada 3s para acompanhar a taxa em tempo real
-  useEffect(() => {
-    if (!isConnected) return;
 
-    let isMounted = true;
-    const fetchBandwidth = async () => {
-      try {
-        const res = await fetch('/api/server/bandwidth');
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            if (!hasActiveStreams) {
-              data.currentMbps = 0;
-              data.rxMbps = 0;
-              data.txMbps = 0;
-              data.percent = 0;
-            }
-            setServerBandwidth(data);
-          }
-        }
-      } catch {
-        // Silencioso em caso de falha de conexão
-      }
-    };
-
-    // Busca inicial de cota ao entrar na sala
-    fetchBandwidth();
-
-    if (hasActiveStreams) {
-      const interval = setInterval(fetchBandwidth, 3000);
-      return () => {
-        isMounted = false;
-        clearInterval(interval);
-      };
-    } else {
-      setServerBandwidth((prev) => (prev ? { ...prev, currentMbps: 0, rxMbps: 0, txMbps: 0, percent: 0 } : null));
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isConnected, hasActiveStreams]);
 
   // Mídias remotas assistidas sob demanda (estilo Discord)
   const [watchedTrackSids, setWatchedTrackSids] = useState<Set<string>>(new Set());
@@ -500,7 +481,7 @@ export default function Home() {
       .replace(/[^a-z0-9_-]/g, '')
       .substring(0, 16);
 
-    // 🛡️ Identidade Estável: Preserva o mesmo ID em qualquer sala, chamada ou reconexão
+    // Identidade Estável: Preserva o mesmo ID em qualquer sala, chamada ou reconexão
     let cleanUserId = '';
     if (detectedDiscordUser && detectedDiscordUser.id) {
       cleanUserId = `${sanitizedId}_${detectedDiscordUser.id.substring(detectedDiscordUser.id.length - 6)}`;
@@ -557,12 +538,11 @@ export default function Home() {
     setIsJoining(true);
     setJoinError(null);
     try {
+      const activeGuildId = (typeof window !== 'undefined' ? (localStorage.getItem('ecolive_guild_id') || new URLSearchParams(window.location.search).get('guild_id')) : '') || undefined;
       console.log(`[EcoApp Join] Conectando à sala "${targetRoom}" como "${name}" (${cleanUserId})...`);
-      await connect(targetRoom, cleanUserId, 'web', name, effectiveAvatar);
+      await connect(targetRoom, cleanUserId, 'web', name, effectiveAvatar, activeGuildId, channelName || undefined);
 
-      // 🚀 Sincronização Automática de Ingress entre Salas:
-      // Ao entrar em qualquer sala (Call X -> Call Y), atualiza o Ingress existente para apontar para a nova sala
-      // sem exigir que o usuário reabra o modal ou reconfigure o OBS!
+      // Sincronização Automática de Ingress entre Salas
       fetch('/api/ingress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -571,6 +551,8 @@ export default function Home() {
           userId: cleanUserId,
           name: name,
           avatar: effectiveAvatar,
+          guildId: activeGuildId,
+          channelName: channelName || undefined,
         }),
       }).catch((syncErr) => {
         console.warn('[EcoApp Ingress Sync] Falha ao sincronizar sala do Ingress:', syncErr);
@@ -583,7 +565,7 @@ export default function Home() {
     }
   };
 
-  // 🔄 Auto-reconexão ultrarrápida (Nova Janela / Popout / F5):
+  // Auto-reconexão ultrarrápida (Nova Janela / Popout / F5):
   // Dispara a entrada na sala de forma instantânea (exatamente como ao clicar no botão),
   // sem nenhum atraso artificial!
   useEffect(() => {
@@ -642,7 +624,7 @@ export default function Home() {
     disconnect();
   };
 
-  // 🛡️ Encerra a mídia na chamada caso a aba/janela ou iframe seja fechado (chave permanente preservada)
+  // Encerra a mídia na chamada caso a aba/janela ou iframe seja fechado (chave permanente preservada)
   useEffect(() => {
     const handleLeave = () => {
       if (typeof window === 'undefined') return;
@@ -688,6 +670,7 @@ export default function Home() {
       const room = currentRoom || channelId.trim() || 'call-discord-alpha';
       const savedCleanId = typeof window !== 'undefined' ? localStorage.getItem('ecolive_user_clean_id') : null;
       const user = currentIdentity || savedCleanId || displayName.trim() || 'streamer';
+      const activeGuildId = typeof window !== 'undefined' ? localStorage.getItem('ecolive_guild_id') : undefined;
       const res = await fetch('/api/ingress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -696,6 +679,8 @@ export default function Home() {
           userId: user,
           name: displayName.trim() || undefined,
           avatar: avatarUrl || undefined,
+          guildId: activeGuildId || undefined,
+          channelName: channelName || undefined,
           forceNew,
         }),
       });
@@ -782,17 +767,29 @@ export default function Home() {
     setTimeout(() => setCopiedField(null), 2500);
   };
 
+  // =========================================================================
+  // [BLOQUEIO SILENCIOSO PROPOSITAL - NÃO REMOVER OU "CORRIGIR"]
+  // Esta tela de "Falha na Comunicação (503)" é 100% INTENCIONAL!
+  // Ela serve como disfarce/mascaramento de segurança para servidores do
+  // Discord não cadastrados na whitelist. Nunca altere para mensagem de
+  // "Acesso Negado" ou permissão para não chamar atenção de terceiros/filtros.
+  // =========================================================================
   if (isRestricted) {
     return (
-      <main className="min-h-screen bg-[#0d0e12] text-zinc-100 flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full bg-zinc-900/80 border border-red-500/30 p-8 rounded-2xl text-center space-y-4">
-          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-3xl">⛔</span>
+      <main className="min-h-screen bg-[#0d0e12] text-zinc-100 flex flex-col items-center justify-center p-6 select-none">
+        <div className="max-w-sm w-full bg-zinc-900/70 border border-zinc-800/80 p-7 rounded-2xl text-center space-y-3 shadow-2xl backdrop-blur-sm">
+          <div className="w-11 h-11 rounded-xl bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center mx-auto mb-3 text-zinc-400">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
           </div>
-          <h2 className="text-2xl font-bold text-red-400">Acesso Restrito</h2>
-          <p className="text-zinc-400 text-sm">
-            Este aplicativo privado não está autorizado para uso neste servidor do Discord.
+          <h2 className="text-sm font-semibold text-zinc-200">Falha na Comunicação</h2>
+          <p className="text-zinc-400 text-xs leading-relaxed">
+            Não foi possível sincronizar com o servidor da aplicação. Verifique os parâmetros de rede e tente novamente mais tarde.
           </p>
+          <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-center gap-1.5">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Status: ERR_NETWORK_UNAVAILABLE (503)</span>
+          </div>
         </div>
       </main>
     );
@@ -804,7 +801,9 @@ export default function Home() {
       <header className="w-full border-b border-zinc-800/80 bg-[#0d0e12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 shadow-lg shadow-black/50">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-xs sm:text-sm text-white shadow-lg shadow-emerald-500/20 shrink-0">
-            🍃
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -817,47 +816,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Monitor Discreto de Rede do Servidor (Visível apenas dentro da sala) */}
-        {isConnected && serverBandwidth && (
-          <div
-            className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono shadow-inner select-none shrink-0"
-            title={`Tráfego Geral do Servidor (P2P + Servidor)\nDownload: ${serverBandwidth.rxMbps} Mbps | Upload: ${serverBandwidth.txMbps} Mbps\nCota do Servidor: ${serverBandwidth.totalUsedGB} GB usados de ${serverBandwidth.totalQuotaTB} TB (${serverBandwidth.quotaPercent}%)`}
-          >
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  hasActiveStreams && serverBandwidth.currentMbps > 0
-                    ? serverBandwidth.percent > 85
-                      ? 'bg-rose-500 animate-ping'
-                      : serverBandwidth.percent > 65
-                      ? 'bg-amber-400 animate-pulse'
-                      : 'bg-emerald-400 animate-pulse'
-                    : 'bg-emerald-500/50'
-                }`}
-              />
-              <span className="text-zinc-500 text-[10px] uppercase font-sans font-semibold">Rede:</span>
-              <span className="text-zinc-200 font-semibold">
-                {hasActiveStreams ? serverBandwidth.currentMbps.toFixed(1) : '0.0'} Mbps
-              </span>
-              <span className="text-zinc-600">/</span>
-              <span className="text-zinc-400">
-                {serverBandwidth.maxMbps >= 1000
-                  ? `${(serverBandwidth.maxMbps / 1000).toFixed(0)} Gbps`
-                  : `${serverBandwidth.maxMbps} Mbps`}
-              </span>
-            </div>
 
-            <span className="text-zinc-700 font-light">|</span>
-
-            {/* Cota Total de 2TB */}
-            <div className="flex items-center gap-1 text-[10px]">
-              <span className="text-zinc-500 font-sans font-semibold">Total:</span>
-              <span className="text-emerald-400 font-semibold">{serverBandwidth.quotaPercent}% usado</span>
-              <span className="text-zinc-500">de</span>
-              <span className="text-zinc-300 font-semibold">{serverBandwidth.totalQuotaTB} TB</span>
-            </div>
-          </div>
-        )}
 
         {isConnected && (
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -889,7 +848,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* BOTÃO INICIAR TRANSMISSÃO OBS */}
+            {/* BOTÃO CARREGAR MÍDIA */}
             <button
               type="button"
               onClick={() => handleOpenObsModal(false)}
@@ -898,7 +857,7 @@ export default function Home() {
               <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
                 <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
               </svg>
-              <span className="hidden sm:inline">Iniciar Mídia</span>
+              <span className="hidden sm:inline">Carregar Mídia</span>
               <span className="sm:hidden">Software Externo</span>
             </button>
 
@@ -922,7 +881,9 @@ export default function Home() {
               <div className="text-center mb-5">
                 <div className="inline-flex mb-3">
                   <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-emerald-500/20 shrink-0">
-                    🍃
+                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                   </div>
                 </div>
                 <h2 className="text-lg font-bold text-zinc-100">Bem-vindo ao EcoApp</h2>
@@ -955,10 +916,14 @@ export default function Home() {
                           className="h-full w-full object-cover"
                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
-                      ) : (
-                        <span className="text-base text-zinc-500 font-bold">
-                          {displayName ? displayName.trim().charAt(0).toUpperCase() : '👤'}
+                      ) : displayName ? (
+                        <span className="text-base text-zinc-300 font-bold">
+                          {displayName.trim().charAt(0).toUpperCase()}
                         </span>
+                      ) : (
+                        <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
                       )}
                     </div>
                     <input
@@ -1055,7 +1020,7 @@ export default function Home() {
                   Nenhuma mídia ativa no momento.
                 </p>
 
-                {/* BOTÃO INICIAR TRANSMISSÃO NO CENTRO */}
+                {/* BOTÃO CARREGAR MÍDIA NO CENTRO */}
                 <button
                   type="button"
                   onClick={() => handleOpenObsModal(false)}
@@ -1064,7 +1029,7 @@ export default function Home() {
                   <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
                     <path d="M4 4.5A2.5 2.5 0 001.5 7v10A2.5 2.5 0 004 19.5h11a2.5 2.5 0 002.5-2.5v-2.586l3.293 3.293A1 1 0 0022 17V7a1 1 0 00-1.707-.707L17 9.586V7A2.5 2.5 0 0014.5 4.5H4z" />
                   </svg>
-                  <span>Iniciar Mídia</span>
+                  <span>Carregar Mídia</span>
                 </button>
               </div>
             ) : (
@@ -1168,7 +1133,7 @@ export default function Home() {
                         onClick={() => copyToClipboard(whipCredentials.serverUrl, 'obs_url')}
                         className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
                       >
-                        {copiedField === 'obs_url' ? '✓ Copiado!' : 'Copiar'}
+                        {copiedField === 'obs_url' ? 'Copiado!' : 'Copiar'}
                       </button>
                     </div>
                     <input
@@ -1208,7 +1173,7 @@ export default function Home() {
                           onClick={() => copyToClipboard(whipCredentials.streamKey, 'obs_key')}
                           className="text-purple-400 hover:text-purple-300 font-medium cursor-pointer text-[11px]"
                         >
-                          {copiedField === 'obs_key' ? '✓ Copiado!' : 'Copiar'}
+                          {copiedField === 'obs_key' ? 'Copiado!' : 'Copiar'}
                         </button>
                       </div>
                     </div>
@@ -1225,7 +1190,7 @@ export default function Home() {
                     {showResetConfirm && (
                       <div className="mt-2 p-3 rounded-xl bg-rose-950/60 border border-rose-700/50 flex flex-col gap-2">
                         <p className="text-[11px] text-rose-300 leading-snug">
-                          ⚠️ <strong>A chave anterior será invalidada.</strong> Você precisará colar a nova chave no Software Externo antes de transmitir novamente. Deseja continuar?
+                          <strong>A chave anterior será invalidada.</strong> Você precisará colar a nova chave no Software Externo antes de carregar novamente. Deseja continuar?
                         </p>
                         <div className="flex items-center gap-2 justify-end">
                           <button
