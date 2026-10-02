@@ -1,0 +1,22 @@
+title = "EcoLive Zero-Trust Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for build artifacts, lockfiles and samples"
+paths = [
+    '''node_modules/''',
+    '''\.next/''',
+    '''\.git/''',
+    '''package-lock\.json''',
+    '''scratch/''',
+    '''\.env\.example$''',
+    '''public/'''
+]
+regexes = [
+    '''your_livekit_api_key_here''',
+    '''your_livekit_api_secret_here''',
+    '''livekit_api_key_placeholder''',
+    '''livekit_api_secret_placeholder_minimum_32_characters'''
+]
