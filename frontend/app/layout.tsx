@@ -17,7 +17,9 @@ export const metadata: Metadata = {
   title: "EcoLive - Discord Streaming Activity",
   description: "EcoLive: Arquitetura de Nova Geração e Transmissão de Alta Performance para o Discord",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/ecolive_icon.png",
+    shortcut: "/ecolive_icon.png",
+    apple: "/ecolive_icon.png",
   },
 };
 

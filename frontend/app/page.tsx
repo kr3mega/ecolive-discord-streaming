@@ -930,12 +930,11 @@ export default function Home() {
       {/* Barra de Navegação Superior */}
       <header className="w-full border-b border-zinc-800/80 bg-[#0d0e12] sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 shadow-lg shadow-black/50">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-black text-xs sm:text-sm text-white shadow-lg shadow-emerald-500/20 shrink-0">
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-              <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
-            </svg>
-          </div>
+          <img
+            src="/ecolive_icon.png"
+            alt="EcoLive"
+            className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-md shadow-emerald-500/20 shrink-0"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-100 truncate">EcoLive</h1>
@@ -1021,12 +1020,11 @@ export default function Home() {
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                     ) : (
-                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 shrink-0">
-                        <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-                          <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
-                        </svg>
-                      </div>
+                      <img
+                        src="/ecolive_icon.png"
+                        alt={displayName || 'EcoLive'}
+                        className="h-16 w-16 rounded-2xl object-cover border-2 border-emerald-500/50 shadow-xl shadow-emerald-500/20 shrink-0"
+                      />
                     )}
                     <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-950 animate-ping" />
                     <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-950" />
@@ -1146,12 +1144,11 @@ export default function Home() {
               <div className="max-w-sm w-full mx-auto my-auto flex flex-col gap-4">
                 <div className="bg-zinc-900/90 border border-zinc-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-md text-center">
                   <div className="inline-flex mb-3">
-                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 shrink-0">
-                      <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-                        <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
-                      </svg>
-                    </div>
+                    <img
+                      src="/ecolive_icon.png"
+                      alt="EcoLive"
+                      className="h-14 w-14 rounded-2xl object-contain shadow-xl shadow-emerald-500/20 shrink-0 animate-pulse"
+                    />
                   </div>
                   <h2 className="text-base font-bold text-zinc-100">EcoLive</h2>
                   <p className="text-xs text-zinc-400 mt-2">Verificando autorização...</p>
@@ -1163,12 +1160,11 @@ export default function Home() {
                 <div className="bg-zinc-900/90 border border-zinc-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
                   <div className="text-center mb-6">
                     <div className="inline-flex mb-3">
-                      <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 shrink-0">
-                        <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-                          <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
-                        </svg>
-                      </div>
+                      <img
+                        src="/ecolive_icon.png"
+                        alt="EcoLive"
+                        className="h-14 w-14 rounded-2xl object-contain shadow-xl shadow-emerald-500/20 shrink-0"
+                      />
                     </div>
                     <h2 className="text-lg font-bold text-zinc-100">EcoLive</h2>
                     <p className="text-xs text-zinc-400 mt-1">
