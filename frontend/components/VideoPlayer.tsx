@@ -953,7 +953,7 @@ export function VideoPlayer({
               {participantName || participantIdentity}
             </h4>
             <p className="text-[11px] sm:text-xs text-zinc-400 max-w-xs mb-4">
-              {isObs ? 'Mídia via Software Externo (WHIP)' : 'Compartilhamento de Janela via Navegador'}
+              {isObs ? 'Transmissão via OBS Studio' : 'Compartilhamento de Janela via Navegador'}
             </p>
 
             {/* BOTÃO BRANCO CENTRAL ESTILO DISCORD */}
