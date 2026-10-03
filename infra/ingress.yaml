@@ -1,0 +1,12 @@
+api_key: livekit_api_key_placeholder
+api_secret: "livekit_api_secret_placeholder_minimum_32_characters"
+ws_url: ws://livekit:7880
+redis:
+  address: redis:6379
+whip_port: 8085
+http_relay_port: 9090
+rtc_config:
+  node_ip: "127.0.0.1"
+  use_external_ip: true
+logging:
+  level: info

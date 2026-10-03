@@ -1,0 +1,59 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Ambientes e Segredos (NUNCA comitar)
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.token
+*vault*
+*.tar.gz
+*.tar
+
+# Next.js & Builds
+.next/
+out/
+build/
+dist/
+
+# Dados locais e persistência em runtime
+data/
+*.db
+
+# Logs e Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# AI Assistant Stubs & Instructions
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Local Security Tooling & CI
+.gitleaks.toml
+.github/
+
+# Scripts locais de conveniência do Windows (não versionar)
+*.bat
+*.ps1
+infra/ngrok.yml
+frontend/.gitignore
+frontend/README.md
+
+# Media
+*.mp4
