@@ -978,7 +978,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* BOTÃO CARREGAR MÍDIA */}
+            {/* BOTÃO INICIAR TRANSMISSÃO */}
             <button
               type="button"
               onClick={() => handleOpenObsModal(false)}
